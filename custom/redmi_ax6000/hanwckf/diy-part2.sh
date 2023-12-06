@@ -16,5 +16,6 @@
 sudo apt update
 sudo apt install libfuse-dev
 rm -rf feeds/packages/lang/golang
-svn export https://github.com/sbwml/packages_lang_golang/branches/19.x feeds/packages/lang/golang
+#svn export https://github.com/sbwml/packages_lang_golang/branches/19.x feeds/packages/lang/golang
+git clone https://github.com/sbwml/packages_lang_golang -b 20.x feeds/packages/lang/golang
 ##---------------------------------------------------------
