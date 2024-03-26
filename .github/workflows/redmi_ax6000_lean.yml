@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: OpenWrt Builder
+name: redmi_ax6000_lean
 
 on:
   repository_dispatch:
