@@ -8,7 +8,7 @@
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: gl_mt2500_emortal
+name: redmi_ax6000_hanwckf
 
 on:
   repository_dispatch:
@@ -20,12 +20,12 @@ on:
         default: 'false'
 
 env:
-  REPO_URL: https://github.com/sdf8057/immortalwrt-mt798x.git
-  REPO_BRANCH: mt7981
+  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
+  REPO_BRANCH: openwrt-21.02
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/gl_mt2500/gl_mt2500_emortal.config
-  DIY_P1_SH: ./custom/gl_mt2500/emortal/diy-part1.sh
-  DIY_P2_SH: ./custom/gl_mt2500/emortal/diy-part2.sh
+  CONFIG_FILE: ./config/redmi_ax6000/redmi_ax6000_hanwckf.config
+  DIY_P1_SH: ./custom/redmi_ax6000/hanwckf/diy-part1.sh
+  DIY_P2_SH: ./custom/redmi_ax6000/hanwckf/diy-part2.sh
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_COWTRANSFER: false
@@ -155,9 +155,9 @@ jobs:
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
-        echo "::set-output name=release_tag::gl_mt2500_emortal_$(date +"%Y.%m.%d-%H%M")"
+        echo "::set-output name=release_tag::redmi_ax6000_hanwckf_$(date +"%Y.%m.%d-%H%M")"
         touch release.txt
-        echo "gl_mt2500_emortal firmware" >> release.txt
+        echo "redmi_ax6000_hanwckf firmware" >> release.txt
         [ $UPLOAD_COWTRANSFER = true ] && echo "🔗 [Cowtransfer](${{ steps.cowtransfer.outputs.url }})" >> release.txt
         [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
         echo "::set-output name=status::success"
