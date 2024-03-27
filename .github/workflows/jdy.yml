@@ -10,15 +10,15 @@
 # See /LICENSE for more information.
 #
 
-name: 竞斗云_lean
+name: 竞斗云_Lienol
 
 on:
   repository_dispatch:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/coolsnowwolf/lede
-  REPO_BRANCH: master
+  REPO_URL: https://github.com/Lienol/openwrt
+  REPO_BRANCH: 22.03
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/jdy.config
   DIY_P1_SH: ./custom/redmi_ax6000/hanwckf/diy-part1.sh
