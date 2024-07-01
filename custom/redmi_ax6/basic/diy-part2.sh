@@ -13,8 +13,9 @@
 # Modify default IP
 #sed -i 's/192.168.1.1/192.168.50.5/g' package/base-files/files/bin/config_generate
 ##-----------------Add alist-----------------
-sudo apt update
-sudo apt install libfuse-dev
-rm -rf feeds/packages/lang/golang
-svn export https://github.com/sbwml/packages_lang_golang/branches/19.x feeds/packages/lang/golang
-##---------------------------------------------------------
+#sudo apt update
+#sudo apt install libfuse-dev
+#rm -rf feeds/packages/lang/golang
+#svn export https://github.com/sbwml/packages_lang_golang/branches/19.x feeds/packages/lang/golang
+##--------------turboacc---------------------------------
+curl -sSL https://raw.githubusercontent.com/chenmozhijin/turboacc/luci/add_turboacc.sh -o add_turboacc.sh && bash add_turboacc.sh
