@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 env:
-#  REPO_URL: https://github.com/Gaojianli/immortalwrt-ipq
-  REPO_URL: https://github.com/zjwxh/immortalwrt-ipq-AX3600
+  REPO_URL: https://github.com/Gaojianli/immortalwrt-ipq
+# REPO_URL: https://github.com/zjwxh/immortalwrt-ipq-AX3600
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/redmi_ax6/ax6.config
