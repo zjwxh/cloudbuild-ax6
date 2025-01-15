@@ -10,18 +10,18 @@
 # See /LICENSE for more information.
 #
 
-name: redmi_ax6_immortalwrt
+name: redmi_ax6_immortalwrt-NSS
 
 on:
   repository_dispatch:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/Gaojianli/immortalwrt-ipq
-# REPO_URL: https://github.com/zjwxh/immortalwrt-ipq-AX3600
+# REPO_URL: https://github.com/Gaojianli/immortalwrt-ipq
+  REPO_URL: https://github.com/VIKINGYFY/immortalwrt
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: ./config/redmi_ax6/ax6.config
+  CONFIG_FILE: ./config/redmi_ax6/ax6_nss.config
   DIY_P1_SH: ./custom/redmi_ax6/basic/diy-part1.sh
   DIY_P2_SH: ./custom/redmi_ax6/basic/diy-part2.sh
   UPLOAD_BIN_DIR: false
