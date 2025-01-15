@@ -10,7 +10,7 @@
 # See /LICENSE for more information.
 #
 
-name: redmi_ax6_immortalwrt-NSS
+name: redmi_ax6_immortalwrt-gjl
 
 on:
   repository_dispatch:
