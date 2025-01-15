@@ -19,7 +19,7 @@ on:
 env:
 # REPO_URL: https://github.com/Gaojianli/immortalwrt-ipq
   REPO_URL: https://github.com/VIKINGYFY/immortalwrt
-  REPO_BRANCH: master
+  REPO_BRANCH: main
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/redmi_ax6/ax6_nss.config
   DIY_P1_SH: ./custom/redmi_ax6/basic/diy-part1.sh
