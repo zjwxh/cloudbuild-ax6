@@ -17,8 +17,8 @@ on:
   workflow_dispatch:
 
 env:
-  REPO_URL: https://github.com/hanwckf/immortalwrt-mt798x.git
-  REPO_BRANCH: openwrt-21.02
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-24.10
+  REPO_BRANCH: mt798x-mt799x-6.6-mtwifi
   FEEDS_CONF: feeds.conf.default
   CONFIG_FILE: ./config/redmi_ax6000/redmi_ax6000_immd.config
   DIY_P1_SH: ./custom/redmi_ax6000/hanwckf/diy-part1.sh
