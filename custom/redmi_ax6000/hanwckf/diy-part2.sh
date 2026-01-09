@@ -7,7 +7,7 @@
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # File name: diy-part2.sh
-# Description: 红米AX6000云编译稳定版（自动拉取OpenClash最新正式版）
+# Description: 红米AX6000云编译稳定版（优化OpenClash正式版获取逻辑）
 # 适配：hanwckf/immortalwrt-mt798x
 
 # ==============================================
@@ -36,17 +36,35 @@ rm -rf package/luci-app-openclash
 rm -rf package/feeds/luci/luci-app-openclash
 
 # ==============================================
-# 4. 自动拉取OpenClash官方最新正式版
+# 4. 优化版：多重方式获取OpenClash最新正式版
 # ==============================================
 echo -e "\n===== Step 4: Pull latest official OpenClash ====="
-echo "🔍 正在获取OpenClash官方最新正式版本..."
-# 通过GitHub API获取最新Release版本号（兼容API访问失败）
-OPENCLASH_LATEST_TAG=$(curl -s --connect-timeout 10 https://api.github.com/repos/vernesong/OpenClash/releases/latest | jq -r '.tag_name')
-if [ "$OPENCLASH_LATEST_TAG" != "null" ] && [ -n "$OPENCLASH_LATEST_TAG" ]; then
-    echo "✅ 检测到最新正式版：${OPENCLASH_LATEST_TAG}，开始克隆..."
+echo "🔍 正在获取OpenClash官方最新正式版本（方式1：GitHub API）..."
+# 方式1：带重试/超时/UA的GitHub API请求（提升成功率）
+OPENCLASH_LATEST_TAG=$(curl -s --connect-timeout 15 --max-time 20 --retry 3 --retry-delay 2 \
+                            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+                            https://api.github.com/repos/vernesong/OpenClash/releases/latest | jq -r '.tag_name')
+
+# 方式2：API失败时，解析GitHub Release页面（备用）
+if [ "$OPENCLASH_LATEST_TAG" == "null" ] || [ -z "$OPENCLASH_LATEST_TAG" ]; then
+    echo "⚠️ API获取失败，尝试方式2：解析Release页面..."
+    OPENCLASH_LATEST_TAG=$(curl -s --connect-timeout 15 --max-time 20 --retry 3 \
+                                -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+                                https://github.com/vernesong/OpenClash/releases/latest | grep -Eo 'tag/v[0-9]+\.[0-9]+\.[0-9]+' | awk -F'/' '{print $2}')
+fi
+
+# 方式3：前两种都失败，用预设最新版（兜底，可定期更新）
+if [ -z "$OPENCLASH_LATEST_TAG" ]; then
+    echo "⚠️ 页面解析失败，使用预设最新正式版：v0.4.7..."
+    OPENCLASH_LATEST_TAG="v0.4.7"  # 可根据OpenClash官方更新手动调整
+fi
+
+# 最终克隆对应版本
+if [ -n "$OPENCLASH_LATEST_TAG" ]; then
+    echo "✅ 成功获取OpenClash最新正式版：${OPENCLASH_LATEST_TAG}，开始克隆..."
     git clone --depth=1 --branch ${OPENCLASH_LATEST_TAG} https://github.com/vernesong/OpenClash.git package/luci-app-openclash
 else
-    echo "⚠️  获取正式版失败，使用master分支最新版..."
+    echo "❌ 所有方式均失败，使用master分支最新版..."
     git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
 fi
 
@@ -72,12 +90,12 @@ echo -e "\n===== Step 7: Clean build cache ====="
 make clean && make dirclean
 
 # ==============================================
-# 最终提示（改用EOF包裹多行文本，避免引号错误）
+# 最终提示（改用EOF包裹，避免语法错误）
 # ==============================================
 cat << EOF
 
 ===== DIY completed! =====
-✅ 已自动拉取OpenClash最新版本：${OPENCLASH_LATEST_TAG:-master分支}
+✅ 已获取并克隆OpenClash版本：${OPENCLASH_LATEST_TAG:-master分支}
 ✅ 默认IP已修改为：192.168.31.1
 ✅ Golang已升级到26.x，编译依赖已补齐
 ✅ 刷入固件后，SSH登录路由器执行以下命令安装最新mihomo内核：
