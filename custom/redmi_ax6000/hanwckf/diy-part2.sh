@@ -40,9 +40,9 @@ rm -rf package/feeds/luci/luci-app-openclash
 # ==============================================
 echo -e "\n===== Step 4: Pull latest official OpenClash ====="
 echo "🔍 正在获取OpenClash官方最新正式版本..."
-# 通过GitHub API获取最新Release版本号
-OPENCLASH_LATEST_TAG=$(curl -s https://api.github.com/repos/vernesong/OpenClash/releases/latest | jq -r '.tag_name')
-if [ "$OPENCLASH_LATEST_TAG" != "null" ]; then
+# 通过GitHub API获取最新Release版本号（兼容API访问失败）
+OPENCLASH_LATEST_TAG=$(curl -s --connect-timeout 10 https://api.github.com/repos/vernesong/OpenClash/releases/latest | jq -r '.tag_name')
+if [ "$OPENCLASH_LATEST_TAG" != "null" ] && [ -n "$OPENCLASH_LATEST_TAG" ]; then
     echo "✅ 检测到最新正式版：${OPENCLASH_LATEST_TAG}，开始克隆..."
     git clone --depth=1 --branch ${OPENCLASH_LATEST_TAG} https://github.com/vernesong/OpenClash.git package/luci-app-openclash
 else
@@ -72,10 +72,20 @@ echo -e "\n===== Step 7: Clean build cache ====="
 make clean && make dirclean
 
 # ==============================================
-# 最终提示
+# 最终提示（改用EOF包裹多行文本，避免引号错误）
 # ==============================================
-echo -e "\n===== DIY completed! =====
-✅ 已自动拉取OpenClash最新正式版：${OPENCLASH_LATEST_TAG:-master分支}
+cat << EOF
+
+===== DIY completed! =====
+✅ 已自动拉取OpenClash最新版本：${OPENCLASH_LATEST_TAG:-master分支}
 ✅ 默认IP已修改为：192.168.31.1
 ✅ Golang已升级到26.x，编译依赖已补齐
 ✅ 刷入固件后，SSH登录路由器执行以下命令安装最新mihomo内核：
+---------------------------------------------------
+mkdir -p /etc/openclash/core && cd /etc/openclash/core && \
+rm -rf clash_meta mihomo.tar.gz && \
+curl -L --retry 3 https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-release@main/latest/mihomo-linux-mips64el.tar.gz -o mihomo.tar.gz && \
+tar zxvf mihomo.tar.gz && mv mihomo clash_meta && chmod +x clash_meta && \
+/etc/init.d/openclash restart
+---------------------------------------------------
+EOF
