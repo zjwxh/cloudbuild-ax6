@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # File name: diy-part2.sh
-# Description: 红米AX6000云编译脚本（修复Meta内核集成问题）
+# Description: 红米AX6000云编译脚本（最终修复Meta内核路径问题）
 # 适配：hanwckf/immortalwrt-mt798x
 
 # ==============================================
@@ -31,25 +31,27 @@ echo "src-git helloworld https://github.com/fw876/helloworld.git" >> feeds.conf.
 ./scripts/feeds install -a
 
 # ==============================================
-# 4. 升级OpenClash+强制启用Meta内核（核心修复）
+# 4. 升级OpenClash+强制启用Meta内核（修复路径+最简生效方式）
 # ==============================================
 echo -e "\n===== Step 4: Update OpenClash + Enable Meta Core ====="
 # 清理旧版OpenClash
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf package/luci-app-openclash
 rm -rf package/feeds/luci/luci-app-openclash
-# 克隆OpenClash最新源码
-git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
 
-# 【核心修复】修改OpenClash配置文件，强制启用Meta内核
-# 1. 修改Config.in，默认选中Meta内核
-sed -i 's/select OPENCLASH_USE_META_CORE if OPENCLASH_DOWNLOAD_CORE/select OPENCLASH_USE_META_CORE/g' package/luci-app-openclash/Config.in
-# 2. 修改Makefile，强制设置Meta内核编译开关
-echo 'PKG_CONFIG_DEPENDS += CONFIG_OPENCLASH_USE_META_CORE' >> package/luci-app-openclash/Makefile
-echo 'CONFIG_OPENCLASH_USE_META_CORE=y' >> package/luci-app-openclash/Makefile
-# 3. 强制下载Meta内核（覆盖OpenClash默认配置）
-sed -i 's/OPENCLASH_DOWNLOAD_CORE:=false/OPENCLASH_DOWNLOAD_CORE:=true/g' package/luci-app-openclash/Makefile
-sed -i 's/OPENCLASH_USE_META_CORE:=false/OPENCLASH_USE_META_CORE:=true/g' package/luci-app-openclash/Makefile
+# 克隆OpenClash并移动到正确路径（避免子目录嵌套）
+git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git /tmp/OpenClash
+mv /tmp/OpenClash/luci-app-openclash package/luci-app-openclash
+rm -rf /tmp/OpenClash
+
+# 【核心修复】适配真实路径，强制启用Meta内核（3重保障）
+# 1. 修改Makefile，强制开启Meta内核下载和使用
+sed -i 's/^OPENCLASH_USE_META_CORE:=.*/OPENCLASH_USE_META_CORE:=true/' package/luci-app-openclash/Makefile
+sed -i 's/^OPENCLASH_DOWNLOAD_CORE:=.*/OPENCLASH_DOWNLOAD_CORE:=true/' package/luci-app-openclash/Makefile
+sed -i 's/^OPENCLASH_COMPILE_CORE:=.*/OPENCLASH_COMPILE_CORE:=false/' package/luci-app-openclash/Makefile
+
+# 2. 向.config追加OpenClash主程序编译开关（确保主程序被编译）
+echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
 
 # ==============================================
 # 5. 配置编译参数 + 修改默认IP
@@ -57,9 +59,6 @@ sed -i 's/OPENCLASH_USE_META_CORE:=false/OPENCLASH_USE_META_CORE:=true/g' packag
 echo -e "\n===== Step 5: Configure build params & Modify default IP ====="
 # 修改默认IP
 sed -i 's/192.168.1.1/192.168.31.1/g' package/base-files/files/bin/config_generate
-
-# 启用OpenClash主程序（追加到.config，确保主程序编译）
-echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
 
 # ==============================================
 # 6. 清理编译缓存
@@ -70,6 +69,6 @@ make clean && make dirclean
 echo -e "\n===== DIY part2 completed! ====="
 echo "✅ Golang upgraded to 26.x"
 echo "✅ helloworld feed added（依赖你的自定义.config）"
-echo "✅ OpenClash Meta内核已强制启用（修改源码配置）"
+echo "✅ OpenClash Meta内核路径修复+强制启用"
 echo "✅ Default IP changed to 192.168.31.1"
 echo "✅ 已保留你预先配置的.config文件！"
