@@ -50,26 +50,20 @@ rm -rf package/feeds/luci/luci-app-openclash
 git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
 
 # ==============================================
-# 5. 配置红米AX6000编译参数 + 修改默认IP为192.168.31.1
+# 5. 配置编译参数 + 修改默认IP为192.168.31.1（保留自定义.config）
 # ==============================================
-echo -e "\n===== Step 5: Configure Redmi AX6000 & Modify default IP ====="
-# 进入编译根目录
-cd ./openwrt || exit 1
-
-# 1. 修改默认IP（核心步骤：替换config_generate中的192.168.1.1为192.168.31.1）
+echo -e "\n===== Step 5: Configure build params & Modify default IP ====="
+# 1. 修改默认IP（核心步骤：替换系统默认IP配置，不影响.config）
 sed -i 's/192.168.1.1/192.168.31.1/g' package/base-files/files/bin/config_generate
 
-# 2. 加载红米AX6000默认配置
-cp ./configs/mt798x/mt7981-xiaomi-redmi-ax6000.config .config
-
-# 3. 启用OpenClash编译开关 + 集成Meta内核
+# 2. 启用OpenClash编译开关 + 集成Meta内核（追加配置，不覆盖原有.config）
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
-echo "CONFIG_OPENCLASH_USE_META_CORE=y" >> .config  # 强制使用Meta内核（替代旧内核）
-echo "CONFIG_OPENCLASH_DOWNLOAD_META_CORE=y" >> .config  # 自动下载最新Meta内核（无需手动编译）
+echo "CONFIG_OPENCLASH_USE_META_CORE=y" >> .config  # 强制使用Meta内核
+echo "CONFIG_OPENCLASH_DOWNLOAD_META_CORE=y" >> .config  # 自动下载最新Meta内核
 
-# 4. helloworld组件需手动在make menuconfig中选择（已移除自动勾选逻辑）
+# 3. helloworld组件需依赖你预先配置的.config（已移除自动勾选/覆盖逻辑）
 
-# 5. 自定义固件名称（便于识别版本）
+# 4. 自定义固件名称（便于识别版本）
 sed -i "s/IMG_PREFIX:=immortalwrt/IMG_PREFIX:=ImmortalWrt-RedmiAX6000-$(date +%Y%m%d)-OC047-Meta/" ./include/image.mk
 
 # ==============================================
@@ -80,9 +74,8 @@ make clean && make dirclean
 
 echo -e "\n===== DIY part2 completed! ====="
 echo "✅ Golang upgraded to 26.x"
-echo "✅ helloworld feed added (需手动选择组件)"
-echo "✅ OpenClash updated to 0.4.7 (Meta内核已集成)"
+echo "✅ helloworld feed added（依赖你的自定义.config）"
+echo "✅ OpenClash 0.4.7 + Meta内核已集成（追加到.config）"
 echo "✅ Default IP changed to 192.168.31.1"
-echo "✅ Redmi AX6000 config loaded"
-echo -e "\n⚠️  注意：helloworld组件需执行 make menuconfig 手动勾选后再编译！"
-echo "   勾选路径：LuCI → Applications → 选择需要的组件（如luci-app-xray、luci-app-ssr-plus等）"
+echo "✅ 已保留你预先配置的.config文件，未做任何覆盖！"
+echo -e "\n⚠️  注意：helloworld组件需确保已在自定义.config中勾选，否则不会编译进固件！"
