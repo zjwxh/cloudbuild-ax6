@@ -54,7 +54,7 @@ echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
 # 6. 修改默认IP为192.168.31.1
 # ==============================================
 echo -e "\n===== Step 6: Modify default IP ====="
-sed -i 's/192.168.1.1/192.168.31.1/g' package/base-files/files/bin/config_generate
+sed -i 's/192.168.1.1/192.168.11.1/g' package/base-files/files/bin/config_generate
 
 # ==============================================
 # 7. 清理编译缓存
