@@ -40,7 +40,7 @@ jobs:
         df -hT
         echo "=============================================================================="
 
-    - name: "Optimize Disk Space"
+    - name: "Optimize Disk Space (1/3)"
       uses: "hugoalh/disk-space-optimizer-ghaction@v0.8.1"
       with:
         operate_sudo: "True"
@@ -61,16 +61,37 @@ jobs:
         npm_clean: "True"
         os_swap: "True"
 
-    - name: Freeing up disk space
+    - name: "Optimize Disk Space (2/3)"
       uses: easimon/maximize-build-space@master
       with: 
         root-reserve-mb: 2048
-        swap-size-mb: 1
+        swap-size-mb: 4096  # 增大交换分区，避免编译时内存不足
         remove-dotnet: 'true'
         remove-android: 'true'
         remove-haskell: 'true'
         remove-codeql: 'true'
         remove-docker-images: 'true'
+
+    - name: "Optimize Disk Space (3/3) - 深度清理APT缓存和大文件"
+      run: |
+        # 核心修复：清空APT缓存目录，解决空间不足问题
+        sudo apt-get clean
+        sudo rm -rf /var/cache/apt/archives/*
+        sudo rm -rf /var/lib/apt/lists/*
+        # 删除更多占用空间的大文件
+        sudo rm -rf /usr/local/lib/android/sdk
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/graalvm
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /usr/local/lib/node_modules
+        # 清理日志文件
+        sudo find /var/log -type f -name "*.log" -delete
+        # 清理临时文件
+        sudo rm -rf /tmp/*
+        sudo rm -rf /var/tmp/*
 
     - name: Free up disk space complete
       run: |
@@ -86,7 +107,9 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo -E apt-get -qq update
+        # 先强制更新APT源，避免缓存问题
+        sudo -E apt-get -qq update --fix-missing
+        # 安装依赖（保持原有内容）
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
         bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
         git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
@@ -94,10 +117,9 @@ jobs:
         mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
         libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
         vim wget xmlto xxd zlib1g-dev python3-setuptools
+        # 安装后再次清理
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/local/lib/android /opt/ghc /usr/share/dotnet /usr/local/graalvm /usr/local/.ghcup \
-        /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
         sudo timedatectl set-timezone "$TZ"
         sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
 
