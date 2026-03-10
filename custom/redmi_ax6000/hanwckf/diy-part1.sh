@@ -26,9 +26,6 @@ sed -i 's/^#\(.*helloworld\)/\1/' feeds.conf.default
 # 1. 备份原始feeds.conf.default（可选，防止出错）
 cp feeds.conf.default feeds.conf.default.bak
 
-# 2. 添加核心依赖源（解决基础组件缺失）
-echo "src-git packages https://github.com/immortalwrt/packages.git;master" >> feeds.conf.default
-echo "src-git luci https://github.com/immortalwrt/luci.git;master" >> feeds.conf.default
 
 # 3. 添加OpenClash官方源（保留你原有需求）
 sed -i '/openclash/d' feeds.conf.default # 先移除旧的，避免重复
