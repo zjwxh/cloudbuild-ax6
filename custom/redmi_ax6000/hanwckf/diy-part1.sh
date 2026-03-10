@@ -31,6 +31,7 @@ echo "src-git openclash https://github.com/vernesong/OpenClash.git" >> feeds.con
 # 3. 可选：添加其他常用feeds（如果有需要可取消注释）
 # echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall.git" >> feeds.conf.default
 # echo "src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git" >> feeds.conf.default
+echo "src-git wolplus https://github.com/animegasan/luci-app-wolplus.git" >> feeds.conf.default
 
 # 4. 移除可能冲突的旧OpenClash源（如果有的话）
 sed -i '/openclash/d' feeds.conf.default
