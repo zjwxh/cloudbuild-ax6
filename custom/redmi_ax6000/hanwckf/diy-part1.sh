@@ -11,7 +11,7 @@
 #
 
 # Uncomment a feed source
-echo 'src-git lienol https://github.com/Lienol/openwrt-package' >>feeds.conf.default
+
 sed -i 's/^#\(.*helloworld\)/\1/' feeds.conf.default
 #sed -i "/helloworld/d" "feeds.conf.default"
 #echo "src-git helloworld https://github.com/fw876/helloworld.git" >> "feeds.conf.default"
@@ -33,7 +33,7 @@ echo "src-git openclash https://github.com/vernesong/OpenClash.git" >> feeds.con
 # echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall.git" >> feeds.conf.default
 # echo "src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git" >> feeds.conf.default
 echo "src-git wolplus https://github.com/animegasan/luci-app-wolplus.git" >> feeds.conf.default
-
+echo 'src-git lienol https://github.com/Lienol/openwrt-package' >>feeds.conf.default
 # 4. 移除可能冲突的旧OpenClash源（如果有的话）
 sed -i '/openclash/d' feeds.conf.default
 # 重新添加最新OpenClash源（确保唯一）
