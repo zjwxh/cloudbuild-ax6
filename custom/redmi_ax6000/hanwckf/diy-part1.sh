@@ -19,7 +19,7 @@ sed -i 's/^#\(.*helloworld\)/\1/' feeds.conf.default
 #echo 'src-git helloworld https://github.com/fw876/helloworld' >>feeds.conf.default
 #echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall' >>feeds.conf.default
 #echo 'src-git kiddin9 https://github.com/kiddin9/kwrt-packages' >>feeds.conf.default
-# sed -i '$a src-git kenzok8 https://github.com/kenzok8/small-package' feeds.conf.default
+sed -i '$a src-git kenzok8 https://github.com/kenzok8/small-package' feeds.conf.default
 # DIY part1 script for Redmi AX6000 (hanwckf branch)
 # 主要作用：修改feeds源、添加OpenClash官方源
 
@@ -32,8 +32,8 @@ echo "src-git openclash https://github.com/vernesong/OpenClash.git" >> feeds.con
 # 3. 可选：添加其他常用feeds（如果有需要可取消注释）
 # echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall.git" >> feeds.conf.default
 # echo "src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git" >> feeds.conf.default
-echo "src-git wolplus https://github.com/animegasan/luci-app-wolplus.git" >> feeds.conf.default
-echo 'src-git lienol https://github.com/Lienol/openwrt-package' >>feeds.conf.default
+# echo "src-git wolplus https://github.com/animegasan/luci-app-wolplus.git" >> feeds.conf.default
+# echo 'src-git lienol https://github.com/Lienol/openwrt-package' >>feeds.conf.default
 # 4. 移除可能冲突的旧OpenClash源（如果有的话）
 sed -i '/openclash/d' feeds.conf.default
 # 重新添加最新OpenClash源（确保唯一）
