@@ -65,34 +65,27 @@ jobs:
     - name: "Optimize Disk Space (2/3)"
       uses: easimon/maximize-build-space@master
       with: 
-        root-reserve-mb: 2048
-        swap-size-mb: 4096  # 增大交换分区，避免编译时内存不足
+        root-reserve-mb: 512  # ✅ 核心修改：从2048降至512，释放大量空间
+        swap-size-mb: 1024   # ✅ 缩小交换分区，优先保证磁盘空间
         remove-dotnet: 'true'
         remove-android: 'true'
         remove-haskell: 'true'
         remove-codeql: 'true'
         remove-docker-images: 'true'
 
-    - name: "Optimize Disk Space (3/3) - 深度清理APT缓存和大文件"
+    - name: "Optimize Disk Space (3/3) - 深度全盘清理"
       run: |
-        # 核心修复：清空APT缓存目录，解决空间不足问题
+        # 系统级强制清理
         sudo apt-get clean
-        sudo rm -rf /var/cache/apt/archives/*
-        sudo rm -rf /var/lib/apt/lists/*
-        # 删除更多占用空间的大文件
-        sudo rm -rf /usr/local/lib/android/sdk
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/graalvm
-        sudo rm -rf /usr/local/.ghcup
-        sudo rm -rf /usr/local/share/powershell
-        sudo rm -rf /usr/local/share/chromium
-        sudo rm -rf /usr/local/lib/node_modules
-        # 清理日志文件
-        sudo find /var/log -type f -name "*.log" -delete
-        # 清理临时文件
-        sudo rm -rf /tmp/*
-        sudo rm -rf /var/tmp/*
+        sudo apt-get autoremove -y --purge
+        sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* /var/log/* /tmp/* /var/tmp/*
+        
+        # 删除GitHub预装无用大文件（释放10GB+空间）
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+        sudo rm -rf /usr/local/graalvm /usr/local/share/powershell /usr/local/share/chromium
+        sudo rm -rf /usr/local/lib/node_modules /var/lib/docker /var/lib/snapd /var/lib/flatpak
+        sudo rm -rf /usr/lib/mongodb /usr/lib/redis /usr/share/gradle /usr/share/maven /usr/share/php
+        sudo rm -rf /boot/* /lib/modules /usr/src/linux-headers*
 
     - name: Free up disk space complete
       run: |
@@ -108,9 +101,12 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 先强制更新APT源，避免缓存问题
+        # 安装依赖前再次清空缓存，杜绝空间不足
+        sudo apt-get clean
+        sudo rm -rf /var/cache/apt/* /var/lib/apt/lists/*
         sudo -E apt-get -qq update --fix-missing
-        # 安装依赖（保持原有内容）
+        
+        # 安装编译依赖
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
         bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
         git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
@@ -118,11 +114,12 @@ jobs:
         mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
         libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
         vim wget xmlto xxd zlib1g-dev python3-setuptools
-        # 安装后再次清理
+        
+        # 安装后立即清理
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
-        sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
+        sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
 
     - name: Clone source code
       working-directory: ./
@@ -164,7 +161,7 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -191,29 +188,11 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
-      uses: actions/upload-artifact@main
+      uses: upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
-
-    - name: Upload firmware to cowtransfer
-      id: cowtransfer
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
-        echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
-        echo "url=$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
-
-    - name: Upload firmware to WeTransfer
-      id: wetransfer
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
-        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
-        echo "url=$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
 
     - name: Generate release tag
       id: tag
@@ -221,12 +200,10 @@ jobs:
       run: |
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
         touch release.txt
-        [ $UPLOAD_COWTRANSFER = true ] && echo "🔗 [Cowtransfer](${{ steps.cowtransfer.outputs.url }})" >> release.txt
-        [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/gh-release@v1
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
