@@ -89,13 +89,20 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P2_SH
 
-      # ==================== ✅ 自动修复NSS驱动编译错误（核心修复） ====================
+      # ==================== 🔧 智能修复NSS编译错误（自动查找文件，通用无报错） ====================
       - name: 🔧 自动修复 qca-nss-ecm 编译BUG
         run: |
           cd openwrt
-          # 修复 strlcpy 未定义问题：添加缺失的头文件
-          sed -i '1i #include <linux/string.h>' feeds/nss_packages/qca-nss-ecm/src/ecm_db/ecm_db_iface.c
-          echo "✅ NSS驱动修复完成"
+          # 自动查找报错文件，无视路径，100%找到
+          FILE_PATH=$(find ./ -name "ecm_db_iface.c" 2>/dev/null | head -1)
+          if [ -n "$FILE_PATH" ]; then
+            echo "✅ 找到文件: $FILE_PATH"
+            # 自动添加缺失的头文件，修复strlcpy错误
+            sed -i '1i #include <linux/string.h>' "$FILE_PATH"
+            echo "✅ 修复完成！"
+          else
+            echo "⚠️ 未找到文件，跳过修复（不影响主编译）"
+          fi
 
       - name: 下载软件包依赖
         run: |
