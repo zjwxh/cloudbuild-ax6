@@ -27,10 +27,9 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # ==================== 核心：安全暴力清空磁盘（无任何报错，释放15GB+） ====================
-      - name: 🔥 安全清理磁盘空间（彻底解决No space left on device）
+      # ==================== 安全清理磁盘空间（无报错，释放15GB+） ====================
+      - name: 🔥 清理磁盘空间
         run: |
-          # 仅删除安全无用大文件，不触碰系统分区，零报错
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
@@ -42,14 +41,9 @@ jobs:
           sudo rm -rf /usr/local/share/powershell
           sudo rm -rf /usr/local/share/chromium
           sudo rm -rf /usr/local/lib/node_modules
-          
-          # 清理缓存、临时文件、日志
           sudo rm -rf /var/cache/apt/*
           sudo rm -rf /var/lib/apt/lists/*
           sudo rm -rf /tmp/* /var/tmp/* /var/log/*
-          
-          # 查看清理后的磁盘空间
-          echo "============ 磁盘清理完成 ============"
           df -hT
 
       - name: 检出代码
@@ -61,14 +55,12 @@ jobs:
         run: |
           sudo apt-get update -y
           sudo apt-get install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-          bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
-          git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
+          bzip2 ccache cmake cpio curl device-tree-compiler flex gawk gettext gcc-multilib g++-multilib \
+          git gperf haveged intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
           libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
           mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
           libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
           vim wget xmlto xxd zlib1g-dev python3-setuptools
-          
-          # 安装后清理
           sudo apt-get autoremove --purge -y
           sudo apt-get clean -y
           sudo timedatectl set-timezone "$TZ"
@@ -96,6 +88,14 @@ jobs:
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           chmod +x $DIY_P2_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P2_SH
+
+      # ==================== ✅ 自动修复NSS驱动编译错误（核心修复） ====================
+      - name: 🔧 自动修复 qca-nss-ecm 编译BUG
+        run: |
+          cd openwrt
+          # 修复 strlcpy 未定义问题：添加缺失的头文件
+          sed -i '1i #include <linux/string.h>' feeds/nss_packages/qca-nss-ecm/src/ecm_db/ecm_db_iface.c
+          echo "✅ NSS驱动修复完成"
 
       - name: 下载软件包依赖
         run: |
