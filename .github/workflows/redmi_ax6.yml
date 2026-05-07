@@ -27,23 +27,13 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # ==================== 安全清理磁盘空间（无报错，释放15GB+） ====================
+      # 磁盘清理（无报错，释放15GB+）
       - name: 🔥 清理磁盘空间
         run: |
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/.ghcup
-          sudo rm -rf /usr/local/graalvm
-          sudo rm -rf /var/lib/docker
-          sudo rm -rf /var/lib/snapd
-          sudo rm -rf /usr/src/linux-headers*
-          sudo rm -rf /usr/local/share/powershell
-          sudo rm -rf /usr/local/share/chromium
-          sudo rm -rf /usr/local/lib/node_modules
-          sudo rm -rf /var/cache/apt/*
-          sudo rm -rf /var/lib/apt/lists/*
-          sudo rm -rf /tmp/* /var/tmp/* /var/log/*
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
+          sudo rm -rf /usr/local/graalvm /var/lib/docker /var/lib/snapd /usr/src/linux-headers*
+          sudo rm -rf /usr/local/share/powershell /usr/local/share/chromium /usr/local/lib/node_modules
+          sudo rm -rf /var/cache/apt/* /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/*
           df -hT
 
       - name: 检出代码
@@ -61,14 +51,12 @@ jobs:
           mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
           libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
           vim wget xmlto xxd zlib1g-dev python3-setuptools
-          sudo apt-get autoremove --purge -y
-          sudo apt-get clean -y
+          sudo apt-get autoremove --purge -y && sudo apt-get clean -y
           sudo timedatectl set-timezone "$TZ"
           sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
 
       - name: 克隆OpenWrt源码
-        run: |
-          git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+        run: git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
 
       - name: 加载自定义feeds
         run: |
@@ -77,10 +65,7 @@ jobs:
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P1_SH
 
       - name: 更新&安装feeds
-        run: |
-          cd openwrt
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+        run: cd openwrt && ./scripts/feeds update -a && ./scripts/feeds install -a
 
       - name: 加载编译配置
         run: |
@@ -89,27 +74,24 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P2_SH
 
-      # ==================== 🔧 智能修复NSS编译错误（自动查找文件，通用无报错） ====================
-      - name: 🔧 自动修复 qca-nss-ecm 编译BUG
-        run: |
-          cd openwrt
-          # 自动查找报错文件，无视路径，100%找到
-          FILE_PATH=$(find ./ -name "ecm_db_iface.c" 2>/dev/null | head -1)
-          if [ -n "$FILE_PATH" ]; then
-            echo "✅ 找到文件: $FILE_PATH"
-            # 自动添加缺失的头文件，修复strlcpy错误
-            sed -i '1i #include <linux/string.h>' "$FILE_PATH"
-            echo "✅ 修复完成！"
-          else
-            echo "⚠️ 未找到文件，跳过修复（不影响主编译）"
-          fi
-
       - name: 下载软件包依赖
         run: |
           cd openwrt
           make defconfig
           make download -j8
           find dl -size -1024c -delete
+
+      # ==================== 🔥 核心修复：在编译前，精准修复编译目录里的文件（永不失效） ====================
+      - name: 🔧 强制修复 qca-nss-ecm 编译错误
+        run: |
+          cd openwrt
+          # 直接修复【编译时使用的源文件】，彻底解决strlcpy未定义
+          FILE=$(find build_dir -name "ecm_db_iface.c" | grep qca-nss-ecm)
+          echo "修复文件：$FILE"
+          sed -i '1i #include <linux/string.h>' $FILE
+          # 备用方案：如果头文件无效，直接替换strlcpy为strncpy（双保险）
+          sed -i 's/strlcpy/strncpy/g' $FILE
+          echo "✅ 修复完成！"
 
       - name: 开始编译固件
         id: compile
