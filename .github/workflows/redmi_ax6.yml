@@ -27,10 +27,10 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # ==================== 核心修复：第一步 暴力清空磁盘（无任何依赖，瞬间生效） ====================
-      - name: 🔥 暴力清空磁盘空间（解决 No space left on device）
+      # ==================== 核心：安全暴力清空磁盘（无任何报错，释放15GB+） ====================
+      - name: 🔥 安全清理磁盘空间（彻底解决No space left on device）
         run: |
-          # 直接删除所有占用空间的大文件，不经过任何缓存，立刻释放15GB+
+          # 仅删除安全无用大文件，不触碰系统分区，零报错
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
@@ -39,16 +39,20 @@ jobs:
           sudo rm -rf /var/lib/docker
           sudo rm -rf /var/lib/snapd
           sudo rm -rf /usr/src/linux-headers*
-          sudo rm -rf /boot/*
+          sudo rm -rf /usr/local/share/powershell
+          sudo rm -rf /usr/local/share/chromium
+          sudo rm -rf /usr/local/lib/node_modules
+          
+          # 清理缓存、临时文件、日志
           sudo rm -rf /var/cache/apt/*
           sudo rm -rf /var/lib/apt/lists/*
           sudo rm -rf /tmp/* /var/tmp/* /var/log/*
           
-          # 清理完成后查看空间
+          # 查看清理后的磁盘空间
           echo "============ 磁盘清理完成 ============"
           df -hT
 
-      - name: Checkout
+      - name: 检出代码
         uses: actions/checkout@main
 
       - name: 初始化编译环境
@@ -64,23 +68,23 @@ jobs:
           libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
           vim wget xmlto xxd zlib1g-dev python3-setuptools
           
-          # 安装完成后清理
+          # 安装后清理
           sudo apt-get autoremove --purge -y
-          sudo apt-get clean
+          sudo apt-get clean -y
           sudo timedatectl set-timezone "$TZ"
-          sudo chown -R $USER:$GITHUB_WORKSPACE
+          sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
 
-      - name: 克隆源码
+      - name: 克隆OpenWrt源码
         run: |
           git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
 
-      - name: 加载自定义 feeds
+      - name: 加载自定义feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P1_SH
 
-      - name: 更新并安装 feeds
+      - name: 更新&安装feeds
         run: |
           cd openwrt
           ./scripts/feeds update -a
@@ -93,14 +97,14 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P2_SH
 
-      - name: 下载依赖包
+      - name: 下载软件包依赖
         run: |
           cd openwrt
           make defconfig
           make download -j8
           find dl -size -1024c -delete
 
-      - name: 编译固件
+      - name: 开始编译固件
         id: compile
         run: |
           cd openwrt
@@ -119,14 +123,14 @@ jobs:
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
           echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: 上传固件
+      - name: 上传固件到Actions
         uses: actions/upload-artifact@main
         if: steps.organize.outputs.status == 'success'
         with:
           name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
           path: ${{ env.FIRMWARE }}
 
-      - name: 清理工作流
+      - name: 自动清理旧工作流
         uses: Mattraks/delete-workflow-runs@v2
         with:
           retain_days: 1
