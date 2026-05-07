@@ -65,8 +65,8 @@ jobs:
     - name: "Optimize Disk Space (2/3)"
       uses: easimon/maximize-build-space@master
       with: 
-        root-reserve-mb: 512  # ✅ 核心修改：从2048降至512，释放大量空间
-        swap-size-mb: 1024   # ✅ 缩小交换分区，优先保证磁盘空间
+        root-reserve-mb: 512
+        swap-size-mb: 1024
         remove-dotnet: 'true'
         remove-android: 'true'
         remove-haskell: 'true'
@@ -75,12 +75,9 @@ jobs:
 
     - name: "Optimize Disk Space (3/3) - 深度全盘清理"
       run: |
-        # 系统级强制清理
         sudo apt-get clean
         sudo apt-get autoremove -y --purge
         sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* /var/log/* /tmp/* /var/tmp/*
-        
-        # 删除GitHub预装无用大文件（释放10GB+空间）
         sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
         sudo rm -rf /usr/local/graalvm /usr/local/share/powershell /usr/local/share/chromium
         sudo rm -rf /usr/local/lib/node_modules /var/lib/docker /var/lib/snapd /var/lib/flatpak
@@ -101,12 +98,9 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 安装依赖前再次清空缓存，杜绝空间不足
         sudo apt-get clean
         sudo rm -rf /var/cache/apt/* /var/lib/apt/lists/*
         sudo -E apt-get -qq update --fix-missing
-        
-        # 安装编译依赖
         sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
         bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
         git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
@@ -114,8 +108,6 @@ jobs:
         mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
         libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
         vim wget xmlto xxd zlib1g-dev python3-setuptools
-        
-        # 安装后立即清理
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
@@ -188,7 +180,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware directory
-      uses: upload-artifact@main
+      uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
@@ -203,7 +195,7 @@ jobs:
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
-      uses: softprops/gh-release@v1
+      uses: softprops/action-gh-release@v1
       if: steps.tag.outputs.status == 'success' && !cancelled()
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
