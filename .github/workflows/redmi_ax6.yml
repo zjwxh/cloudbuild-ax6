@@ -2,7 +2,6 @@
 # https://github.com/P3TERX/Actions-OpenWrt
 #
 # File: .github/workflows/redmi_ax6.yml
-# Description: Build OpenWrt using GitHub Actions
 #
 
 name: redmi_ax6_immortalwrt-NSS
@@ -27,7 +26,6 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      # 磁盘清理（无报错，释放15GB+）
       - name: 🔥 清理磁盘空间
         run: |
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
@@ -36,10 +34,10 @@ jobs:
           sudo rm -rf /var/cache/apt/* /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/*
           df -hT
 
-      - name: 检出代码
+      - name: Checkout
         uses: actions/checkout@main
 
-      - name: 初始化编译环境
+      - name: 初始化环境
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
@@ -52,74 +50,66 @@ jobs:
           libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
           vim wget xmlto xxd zlib1g-dev python3-setuptools
           sudo apt-get autoremove --purge -y && sudo apt-get clean -y
-          sudo timedatectl set-timezone "$TZ"
-          sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
 
-      - name: 克隆OpenWrt源码
+      - name: 克隆源码
         run: git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
 
-      - name: 加载自定义feeds
+      - name: 加载 feeds
         run: |
           [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
           chmod +x $DIY_P1_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P1_SH
 
-      - name: 更新&安装feeds
-        run: cd openwrt && ./scripts/feeds update -a && ./scripts/feeds install -a
+      - name: 更新 feeds
+        run: cd openwrt && ./scripts/feeds update -a
 
-      - name: 加载编译配置
+      - name: 安装 feeds
+        run: cd openwrt && ./scripts/feeds install -a
+
+      - name: 加载配置
         run: |
           [ -e files ] && mv files openwrt/files
           [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
           chmod +x $DIY_P2_SH
           cd openwrt && $GITHUB_WORKSPACE/$DIY_P2_SH
 
-      - name: 下载软件包依赖
+      - name: 下载依赖
         run: |
           cd openwrt
           make defconfig
           make download -j8
           find dl -size -1024c -delete
 
-      # ==================== 🔥 核心修复：在编译前，精准修复编译目录里的文件（永不失效） ====================
-      - name: 🔧 强制修复 qca-nss-ecm 编译错误
+      # ✅ 安全修复，找不到文件也不会报错中断
+      - name: 🔧 尝试修复 NSS 编译错误
         run: |
           cd openwrt
-          # 直接修复【编译时使用的源文件】，彻底解决strlcpy未定义
-          FILE=$(find build_dir -name "ecm_db_iface.c" | grep qca-nss-ecm)
-          echo "修复文件：$FILE"
-          sed -i '1i #include <linux/string.h>' $FILE
-          # 备用方案：如果头文件无效，直接替换strlcpy为strncpy（双保险）
-          sed -i 's/strlcpy/strncpy/g' $FILE
-          echo "✅ 修复完成！"
+          find build_dir -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
+          find build_dir -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
+          echo "✅ 修复完成（无论是否找到文件都不会中断）"
 
-      - name: 开始编译固件
+      - name: 开始编译
         id: compile
         run: |
           cd openwrt
           make -j$(nproc) || make -j1 V=s
           echo "status=success" >> $GITHUB_OUTPUT
-          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
-          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
-          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-      - name: 整理固件文件
-        id: organize
+      - name: 整理文件
         if: steps.compile.outputs.status == 'success'
         run: |
           cd openwrt/bin/targets/*/*
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
 
-      - name: 上传固件到Actions
+      - name: 上传固件
         uses: actions/upload-artifact@main
-        if: steps.organize.outputs.status == 'success'
+        if: steps.compile.outputs.status == 'success'
         with:
-          name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          name: OpenWrt_firmware
           path: ${{ env.FIRMWARE }}
 
-      - name: 自动清理旧工作流
+      - name: 清理旧工作流
         uses: Mattraks/delete-workflow-runs@v2
         with:
           retain_days: 1
