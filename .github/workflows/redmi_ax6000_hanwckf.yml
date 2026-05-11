@@ -32,14 +32,28 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-    - name: Checkout
-      uses: actions/checkout@main
+    # 第一步：在任何操作前先清理 Runner 缓存（最关键！）
+    - name: 🔥 紧急清理 GitHub Runner 缓存
+      run: |
+        echo "=== 清理前磁盘状态 ==="
+        df -hT
+        echo "=== 清理 Runner 缓存 ==="
+        sudo rm -rf /home/runner/actions-runner/cached/*
+        sudo rm -rf /home/runner/_work/_temp/*
+        sudo rm -rf /home/runner/.cache/*
+        echo "=== 清理系统临时文件 ==="
+        sudo rm -rf /tmp/*
+        sudo rm -rf /var/tmp/*
+        sudo rm -rf /var/log/*
+        echo "=== 清理后磁盘状态 ==="
+        df -hT
 
-    - name: Free up disk space
+    # 第二步：最大化磁盘空间
+    - name: 📦 最大化构建空间
       uses: easimon/maximize-build-space@master
       with:
-        root-reserve-mb: 4096
-        swap-size-mb: 8192
+        root-reserve-mb: 5120
+        swap-size-mb: 12288
         remove-dotnet: 'true'
         remove-android: 'true'
         remove-haskell: 'true'
@@ -47,18 +61,36 @@ jobs:
         remove-docker-images: 'true'
         remove-rust: 'true'
         remove-nodejs: 'true'
+        remove-go: 'true'
+        remove-php: 'true'
+        remove-ruby: 'true'
+        remove-python: 'false'  # 保留Python，编译必须
 
-    - name: Deep clean disk space
+    # 第三步：深度系统清理
+    - name: 🧹 深度系统清理
       run: |
-        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
-        sudo apt clean
+        echo "=== 卸载无用软件包 ==="
+        sudo apt purge -y azure-cli google-chrome-stable firefox powershell mono-devel
         sudo apt autoremove -y
+        sudo apt clean
+        echo "=== 删除大文件目录 ==="
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/graalvm
+        sudo rm -rf /usr/local/.ghcup
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /usr/local/lib/node_modules
+        sudo rm -rf /var/lib/apt/lists/*
         sudo rm -rf /var/cache/apt/archives/*
-        sudo rm -rf /tmp/* /var/tmp/*
-        sudo rm -rf /var/log/*
-        df -h
+        echo "=== 最终磁盘状态 ==="
+        df -hT
 
-    - name: Initialization environment
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: 初始化环境
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
@@ -74,25 +106,27 @@ jobs:
         sudo apt clean
         sudo timedatectl set-timezone "$TZ"
         sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
+        echo "=== 安装依赖后磁盘状态 ==="
+        df -hT
 
-    - name: Clone source code
+    - name: 克隆源码
       run: |
         git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
 
-    - name: Load custom feeds
+    - name: 加载自定义 feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
-    - name: Update feeds
+    - name: 更新 feeds
       run: cd openwrt && ./scripts/feeds update -a
 
-    - name: Install feeds
+    - name: 安装 feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: Load custom configuration
+    - name: 加载自定义配置
       run: |
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
@@ -100,36 +134,39 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: Download package
+    - name: 下载软件包
       id: package
       run: |
         cd openwrt
         make defconfig
         make download -j8
         find dl -size -1024c -exec rm -f {} \;
+        echo "=== 下载完成后磁盘状态 ==="
+        df -hT
 
-    - name: Compile the firmware
+    - name: 编译固件
       id: compile
       run: |
         cd openwrt
+        echo -e "使用 $(nproc) 线程编译，失败自动降级为单线程详细模式"
         make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: Check space usage
+    - name: 检查空间使用
       if: (!cancelled())
       run: df -hT
 
-    - name: Upload bin directory
+    - name: 上传 bin 目录
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
-    - name: Organize files
+    - name: 整理文件
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
@@ -138,21 +175,21 @@ jobs:
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: Upload firmware directory
+    - name: 上传固件目录
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
-    - name: Delete workflow runs
+    - name: 删除旧工作流
       uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 1
         keep_minimum_runs: 3
 
-    - name: Remove old Releases
-      uses: dev-drprasad/delete-older-releases@v0.1.0
+    - name: 删除旧 Releases
+      uses: dev-drprasad/delete-older-releases@0.1.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 3
