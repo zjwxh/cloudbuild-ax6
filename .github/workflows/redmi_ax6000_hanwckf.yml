@@ -7,7 +7,7 @@
 # Copyright (c) 2019-2024 P3TERX <https://p3terx.com>
 #
 # This is free software, licensed under the MIT License.
-# See LICENSE for more information.
+# See /LICENSE for more information.
 #
 
 name: redmi_ax6000_hanwckf
@@ -31,102 +31,72 @@ env:
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
-    # 第一步：在任何操作前先清理 Runner 缓存（最关键！）
-    - name: 🔥 紧急清理 GitHub Runner 缓存
+    - name: Before freeing up disk space
       run: |
-        echo "=== 清理前磁盘状态 ==="
+        echo "Before freeing up disk space"
+        echo "=============================================================================="
         df -hT
-        echo "=== 清理 Runner 缓存 ==="
-        sudo rm -rf /home/runner/actions-runner/cached/*
-        sudo rm -rf /home/runner/_work/_temp/*
-        sudo rm -rf /home/runner/.cache/*
-        echo "=== 清理系统临时文件 ==="
-        sudo rm -rf /tmp/*
-        sudo rm -rf /var/tmp/*
-        sudo rm -rf /var/log/*
-        echo "=== 清理后磁盘状态 ==="
-        df -hT
+        echo "=============================================================================="
 
-    # 第二步：最大化磁盘空间
-    - name: 📦 最大化构建空间
-      uses: easimon/maximize-build-space@master
+    - name: "Optimize Disk Space"
+      uses: jlumbroso/free-disk-space@main
       with:
-        root-reserve-mb: 5120
-        swap-size-mb: 12288
-        remove-dotnet: 'true'
-        remove-android: 'true'
-        remove-haskell: 'true'
-        remove-codeql: 'true'
-        remove-docker-images: 'true'
-        remove-rust: 'true'
-        remove-nodejs: 'true'
-        remove-go: 'true'
-        remove-php: 'true'
-        remove-ruby: 'true'
-        remove-python: 'false'  # 保留Python，编译必须
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
 
-    # 第三步：深度系统清理
-    - name: 🧹 深度系统清理
+    - name: Free up disk space complete
       run: |
-        echo "=== 卸载无用软件包 ==="
-        sudo apt purge -y azure-cli google-chrome-stable firefox powershell mono-devel
-        sudo apt autoremove -y
-        sudo apt clean
-        echo "=== 删除大文件目录 ==="
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf /usr/local/graalvm
-        sudo rm -rf /usr/local/.ghcup
-        sudo rm -rf /usr/local/share/powershell
-        sudo rm -rf /usr/local/share/chromium
-        sudo rm -rf /usr/local/lib/node_modules
-        sudo rm -rf /var/lib/apt/lists/*
-        sudo rm -rf /var/cache/apt/archives/*
-        echo "=== 最终磁盘状态 ==="
+        echo "Free up disk space complete"
+        echo "=============================================================================="
         df -hT
+        echo "=============================================================================="
 
     - name: Checkout
       uses: actions/checkout@main
 
-    - name: 初始化环境
+    - name: Initialization environment
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo apt update -qq
-        sudo apt install -y ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+        sudo -E apt-get update
+        sudo -E apt-get -y install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
         bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext gcc-multilib g++-multilib \
         git gperf haveged help2man intltool libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev \
         libmpc-dev libmpfr-dev libncurses5-dev libncursesw5-dev libreadline-dev libssl-dev libtool lrzsz \
         mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python2.7 python3 python3-pyelftools \
         libpython3-dev qemu-utils rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
         vim wget xmlto xxd zlib1g-dev python3-setuptools
-        sudo apt autoremove -y
-        sudo apt clean
+        sudo -E apt-get -y autoremove --purge
+        sudo -E apt-get -y clean
         sudo timedatectl set-timezone "$TZ"
-        sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
-        echo "=== 安装依赖后磁盘状态 ==="
-        df -hT
+        sudo chown $USER:$GROUPS $GITHUB_WORKSPACE
 
-    - name: 克隆源码
+    - name: Clone source code
+      working-directory: ./
       run: |
-        git clone --depth 1 $REPO_URL -b $REPO_BRANCH openwrt
+        git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
 
-    - name: 加载自定义 feeds
+    - name: Load custom feeds
       run: |
         [ -e $FEEDS_CONF ] && mv $FEEDS_CONF openwrt/feeds.conf.default
         chmod +x $DIY_P1_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
-    - name: 更新 feeds
+    - name: Update feeds
       run: cd openwrt && ./scripts/feeds update -a
 
-    - name: 安装 feeds
+    - name: Install feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: 加载自定义配置
+    - name: Load custom configuration
       run: |
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
@@ -134,39 +104,38 @@ jobs:
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
 
-    - name: 下载软件包
+    - name: Download package
       id: package
       run: |
         cd openwrt
         make defconfig
         make download -j8
+        find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-        echo "=== 下载完成后磁盘状态 ==="
-        df -hT
 
-    - name: 编译固件
+    - name: Compile the firmware
       id: compile
       run: |
         cd openwrt
-        echo -e "使用 $(nproc) 线程编译，失败自动降级为单线程详细模式"
-        make -j$(nproc) || make -j1 V=s
+        echo -e "$(nproc) thread compile"
+        make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
 
-    - name: 检查空间使用
+    - name: Check space usage
       if: (!cancelled())
       run: df -hT
 
-    - name: 上传 bin 目录
+    - name: Upload bin directory
       uses: actions/upload-artifact@main
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       with:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
-    - name: 整理文件
+    - name: Organize files
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
@@ -175,21 +144,59 @@ jobs:
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
-    - name: 上传固件目录
+    - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
       with:
         name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: ${{ env.FIRMWARE }}
 
-    - name: 删除旧工作流
+    - name: Upload firmware to cowtransfer
+      id: cowtransfer
+      if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
+      run: |
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+        echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
+        echo "url=$(cat cowtransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to WeTransfer
+      id: wetransfer
+      if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
+      run: |
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
+        echo "url=$(cat wetransfer.log | grep https | cut -f3 -d" ")" >> $GITHUB_OUTPUT
+
+    - name: Generate release tag
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
+        touch release.txt
+        [ $UPLOAD_COWTRANSFER = true ] && echo "🔗 [Cowtransfer](${{ steps.cowtransfer.outputs.url }})" >> release.txt
+        [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
+        echo "status=success" >> $GITHUB_OUTPUT
+
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@v1
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
+
+    - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
       with:
         retain_days: 1
         keep_minimum_runs: 3
 
-    - name: 删除旧 Releases
-      uses: dev-drprasad/delete-older-releases@v0.3.4
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@v0.1.0
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 3
