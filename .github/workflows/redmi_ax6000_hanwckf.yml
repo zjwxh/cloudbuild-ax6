@@ -26,8 +26,8 @@ env:
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: false
-  UPLOAD_COWTRANSFER: false  # 谷歌方案缺失的变量
-  UPLOAD_WETRANSFER: false   # 谷歌方案缺失的变量
+  UPLOAD_COWTRANSFER: false
+  UPLOAD_WETRANSFER: false
   TZ: Asia/Shanghai
 
 jobs:
@@ -35,32 +35,27 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: 🔥 紧急清理 GitHub Runner 核心缓存（解决日志写入失败）
+    - name: 清理前磁盘状态
       run: |
         echo "=== 清理前磁盘状态 ==="
         df -hT
-        echo "=== 清理 Runner 自身缓存 ==="
-        sudo rm -rf /home/runner/actions-runner/cached/*
-        sudo rm -rf /home/runner/_work/_temp/*
-        sudo rm -rf /home/runner/.cache/*
-        sudo rm -rf /tmp/* /var/tmp/* /var/log/*
-        echo "=== 清理后磁盘状态 ==="
-        df -hT
+        echo "=== 内存和交换分区 ==="
+        free -h
 
-    - name: 🧹 社区标准深度空间清理（jlumbroso/free-disk-space）
+    - name: 社区标准深度空间清理
       uses: jlumbroso/free-disk-space@main
       with:
-        tool-cache: false  # 保留编译必需的工具缓存
+        tool-cache: false
         android: true
         dotnet: true
         haskell: true
         large-packages: true
         docker-images: true
-        swap-storage: true  # 自动创建10GB交换分区
+        swap-storage: true
 
-    - name: 空间清理完成
+    - name: 清理后磁盘状态
       run: |
-        echo "=== 最终可用空间 ==="
+        echo "=== 清理后磁盘状态 ==="
         df -hT
         echo "=== 内存和交换分区 ==="
         free -h
@@ -84,7 +79,7 @@ jobs:
         sudo -E apt-get -y clean
         sudo timedatectl set-timezone "$TZ"
         sudo chown -R $USER:$GROUPS $GITHUB_WORKSPACE
-        echo "=== 安装依赖后可用空间 ==="
+        echo "=== 安装依赖后磁盘状态 ==="
         df -hT
 
     - name: 克隆源码
@@ -119,7 +114,7 @@ jobs:
         make defconfig
         make download -j8
         find dl -size -1024c -exec rm -f {} \;
-        echo "=== 下载完成后可用空间 ==="
+        echo "=== 下载完成后磁盘状态 ==="
         df -hT
 
     - name: 编译固件
@@ -205,7 +200,7 @@ jobs:
         keep_minimum_runs: 3
 
     - name: 删除旧 Releases
-      uses: dev-drprasad/delete-older-releases@v0.3.4  # 修复：更新到最新可用版本
+      uses: dev-drprasad/delete-older-releases@v0.3.4
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       with:
         keep_latest: 3
