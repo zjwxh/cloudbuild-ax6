@@ -3,7 +3,7 @@
 # File name: diy-part2.sh
 # Description: 红米AX6云编译（OpenClash最新版）
 # 适配：ImmortalWrt qualcommax/ipq807x (redmi_ax6-stock)
-# 核心：使用你验证过的命令克隆OpenClash最新版
+# 核心：修复 OpenClash 编译时的各类文件依赖冲突
 
 # ==============================================
 # 1. 安装基础依赖（仅保留必须项）
@@ -30,7 +30,7 @@ rm -rf package/luci-app-openclash
 rm -rf package/feeds/luci/luci-app-openclash
 
 # ==============================================
-# 4. 克隆OpenClash最新版（你验证过的核心命令）
+# 4. 克隆OpenClash最新版
 # ==============================================
 echo -e "\n===== Step 4: Clone latest OpenClash ====="
 git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
@@ -45,16 +45,25 @@ else
 fi
 
 # ==============================================
-# 5. 启用OpenClash编译开关
+# 5. 配置 OpenClash 及彻底解决打包冲突 (核心修复区)
 # ==============================================
-echo -e "\n===== Step 5: Enable OpenClash compile switch ====="
+echo -e "\n===== Step 5: Configure OpenClash & Fix Conflicts ====="
+
+# 启用 OpenClash 编译开关
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
 
-# ==============================================
-# 5.5 解决 ath11k 固件冲突：强制禁用 DD-WRT 版本
-# ==============================================
-echo -e "\n===== Step 5.5: Disable conflicting ath11k DD-WRT firmware ====="
-sed -i '/CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt=y/d' .config
+# 1. 强制禁用基础版 dnsmasq，让路给 dnsmasq-full
+sed -i 's/CONFIG_PACKAGE_dnsmasq=y/# CONFIG_PACKAGE_dnsmasq is not set/g' .config
+echo "# CONFIG_PACKAGE_dnsmasq is not set" >> .config
+
+# 2. 强制禁用基础版 wpad，避免与 wpad-openssl 冲突
+sed -i 's/CONFIG_PACKAGE_wpad-basic=y/# CONFIG_PACKAGE_wpad-basic is not set/g' .config
+sed -i 's/CONFIG_PACKAGE_wpad-basic-mbedtls=y/# CONFIG_PACKAGE_wpad-basic-mbedtls is not set/g' .config
+echo "# CONFIG_PACKAGE_wpad-basic is not set" >> .config
+echo "# CONFIG_PACKAGE_wpad-basic-mbedtls is not set" >> .config
+
+# 3. 解决 ath11k 固件冲突：强制禁用 DD-WRT 版本
+sed -i 's/CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt=y/# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt is not set/g' .config
 echo "# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt is not set" >> .config
 
 # ==============================================
@@ -64,16 +73,10 @@ echo -e "\n===== Step 6: Modify default IP ====="
 sed -i 's/192.168.1.1/192.168.11.1/g' package/base-files/files/bin/config_generate
 
 # ==============================================
-# 6.5 刷新配置依赖，确保无冲突
+# 7. 刷新配置依赖，确保所有干预生效
 # ==============================================
-echo -e "\n===== Step 6.5: Refresh config dependencies ====="
+echo -e "\n===== Step 7: Refresh config dependencies ====="
 make defconfig
-
-# ==============================================
-# 7. 清理编译缓存
-# ==============================================
-echo -e "\n===== Step 7: Clean build cache ====="
-make clean && make dirclean
 
 # ==============================================
 # 最终提示
@@ -81,16 +84,16 @@ make clean && make dirclean
 cat << EOF
 
 ===== DIY completed! =====
-✅ 已克隆OpenClash master分支最新版（你验证过的版本）
+✅ 已克隆OpenClash master分支最新版
 ✅ 默认IP已修改为：192.168.11.1
-✅ Golang已升级到26.x，编译依赖已补齐
-✅ 已强制禁用 ath11k-firmware-ipq8074-ddwrt，解决固件冲突
+✅ Golang已升级到26.x
+✅ 【核心修复】已完美清理 dnsmasq、wpad 及 ath11k-ddwrt 的文件冲突！
 ✅ 刷入固件后，SSH登录执行以下命令安装最新mihomo内核：
 ---------------------------------------------------
-mkdir -p /etc/openclash/core && cd /etc/openclash/core && \
-rm -rf clash_meta mihomo.tar.gz && \
-curl -L --retry 3 https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-release@main/latest/mihomo-linux-mips64el.tar.gz -o mihomo.tar.gz && \
-tar zxvf mihomo.tar.gz && mv mihomo clash_meta && chmod +x clash_meta && \
+mkdir -p /etc/openclash/core && cd /etc/openclash/core && \\
+rm -rf clash_meta mihomo.tar.gz && \\
+curl -L --retry 3 https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-release@main/latest/mihomo-linux-mips64el.tar.gz -o mihomo.tar.gz && \\
+tar zxvf mihomo.tar.gz && mv mihomo clash_meta && chmod +x clash_meta && \\
 /etc/init.d/openclash restart
 ---------------------------------------------------
 EOF
