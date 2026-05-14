@@ -99,13 +99,20 @@ jobs:
     - name: 安装 feeds
       run: cd openwrt && ./scripts/feeds install -a
 
-    - name: 加载自定义配置
+    - name: 加载自定义配置并强制生成UBI
       run: |
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH
+        
+        # === 以下为强制生成 factory.ubi 的修改命令 ===
+        # 修改 AX3000T 设备的 Makefile 规则，追加 factory.ubi 生成项
+        echo "正在修改 mt7981.mk 以生成 factory.ubi..."
+        sed -i 's/IMAGES += sysupgrade.bin/IMAGES += sysupgrade.bin factory.ubi/' target/linux/mediatek/image/mt7981.mk
+        sed -i '/IMAGE\/sysupgrade.bin := sysupgrade-tar | append-metadata/a \\tIMAGE\/factory.ubi := append-ubi' target/linux/mediatek/image/mt7981.mk
+        # ==============================================
 
     - name: 下载软件包
       id: package
