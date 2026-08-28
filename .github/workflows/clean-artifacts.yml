@@ -1,0 +1,38 @@
+name: Clean old Artifacts
+on:
+  workflow_dispatch:
+    inputs:
+      keep_days:
+        description: 保留多少天内的产物，填0=删除全部artifacts
+        required: true
+        default: "7"
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write   # 关键权限，必须要有，否则无法删除artifact
+    steps:
+      - name: Delete old artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_DAYS: ${{ github.event.inputs.keep_days }}
+        run: |
+          set -euo pipefail
+          # 计算截止时间戳
+          if [ "$KEEP_DAYS" = "0" ];then
+            cutoff=0
+          else
+            cutoff=$(date -u -d "$KEEP_DAYS days ago" +%s)
+          fi
+          echo "cutoff timestamp: $cutoff"
+
+          # 分页拉取所有artifacts
+          gh api --paginate "/repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+          --jq '.artifacts[] | select( ($cutoff == 0) or (.created_at | fromdateiso8601 < $cutoff) ) | .id' \
+          --argjson cutoff "$cutoff" | while read -r artifact_id;
+          do
+            if [ -z "$artifact_id" ];then continue; fi
+            echo "Deleting artifact id: $artifact_id"
+            gh api -X DELETE "/repos/${{ github.repository }}/actions/artifacts/$artifact_id"
+          done
+          echo "✅清理完成"
