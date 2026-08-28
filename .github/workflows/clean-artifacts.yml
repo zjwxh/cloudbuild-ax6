@@ -34,3 +34,10 @@ jobs:
             gh api -X DELETE "/repos/${{ github.repository }}/actions/artifacts/$artifact_id"
           done
           echo "✅清理完成"
+
+      - name: 📊 查看本仓库Artifact实时占用(单位MB)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "/repos/${{ github.repository }}/actions/artifacts/usage" \
+          | jq -r '.total_size_in_bytes / 1048576 | "✅当前仓库Artifact占用：\(.2) MB"'
