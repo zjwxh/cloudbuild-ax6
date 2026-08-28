@@ -35,9 +35,12 @@ jobs:
           done
           echo "✅清理完成"
 
-      - name: 📊 查看本仓库Artifact实时占用(单位MB)
+      - name: 📊 统计本仓库当前Artifact总占用(单位MB)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api "/repos/${{ github.repository }}/actions/artifacts/usage" \
-          | jq -r '.total_size_in_bytes / 1048576 | "✅当前仓库Artifact占用：\(.2) MB"'
+          set -euo pipefail
+          total_bytes=$(gh api --paginate "/repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+          | jq '[.artifacts[].size_in_bytes] | add // 0')
+          total_mb=$(echo "$total_bytes / 1048576" | bc -l)
+          printf "✅当前仓库Artifact总大小：%.2f MB (%d bytes)\n" "$total_mb" "$total_bytes"
