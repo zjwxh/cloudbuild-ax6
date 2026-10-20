@@ -3,7 +3,18 @@
 # File name: diy-part2.sh
 # Description: 红米AX6云编译（OpenClash最新版）
 # 适配：ImmortalWrt qualcommax/ipq807x (redmi_ax6-stock)
-# 核心：修复 OpenClash 编译时的各类文件依赖冲突
+# 核心：修复 OpenClash 编译时的各类文件依赖冲突 + libbpf1.7→1.6降级 + NSS ECM strlcpy修复
+# ==============================================
+# 0. 【方案A】降级 libbpf 1.7.0 → 1.6.0，解决GCC14 libbpf编译报错
+# ==============================================
+echo "===== Step 0: Downgrade libbpf to 1.6.0 ====="
+sed -i 's/PKG_VERSION:=1.7.0/PKG_VERSION:=1.6.0/g' package/libs/libbpf/Makefile
+sed -i 's/PKG_HASH:=.*/PKG_HASH:=f6a3fb9d680c02689a185a01c12579e4b64361f0d13e8a409107267e8e7e8990/g' package/libs/libbpf/Makefile
+rm -rf dl/libbpf-1.7.0.tar.*
+# NSS ECM修复：修改package源码，替换strlcpy，解决ecm_db_iface.c编译报错
+find package -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
+find package -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
+echo "✅ libbpf降级完成 + NSS ECM源码修复完成"
 
 # ==============================================
 # 1. 安装基础依赖（仅保留必须项）
@@ -13,14 +24,12 @@ sudo apt update -y
 sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
                     gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
                     file wget libfuse-dev curl
-
 # ==============================================
 # 2. 升级feeds中的Golang到26.x
 # ==============================================
 echo -e "\n===== Step 2: Upgrade Golang to 26.x ====="
 rm -rf feeds/packages/lang/golang
 git clone --depth=1 https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
-
 # ==============================================
 # 3. 删除旧的OpenClash包（防止冲突）
 # ==============================================
@@ -28,13 +37,11 @@ echo -e "\n===== Step 3: Remove old OpenClash packages ====="
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf package/luci-app-openclash
 rm -rf package/feeds/luci/luci-app-openclash
-
 # ==============================================
 # 4. 克隆OpenClash最新版
 # ==============================================
 echo -e "\n===== Step 4: Clone latest OpenClash ====="
 git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
-
 # 确保目录存在后，禁用编译时下载内核（修复Makefile报错）
 if [ -d "package/luci-app-openclash" ]; then
     echo "OPENCLASH_DOWNLOAD_CORE := false" >> package/luci-app-openclash/Makefile
@@ -43,47 +50,40 @@ else
     echo "❌ OpenClash克隆失败！"
     exit 1
 fi
-
 # ==============================================
 # 5. 配置 OpenClash 及彻底解决打包冲突 (核心修复区)
 # ==============================================
 echo -e "\n===== Step 5: Configure OpenClash & Fix Conflicts ====="
-
 # 启用 OpenClash 编译开关
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
-
 # 1. 强制禁用基础版 dnsmasq，让路给 dnsmasq-full
 sed -i 's/CONFIG_PACKAGE_dnsmasq=y/# CONFIG_PACKAGE_dnsmasq is not set/g' .config
 echo "# CONFIG_PACKAGE_dnsmasq is not set" >> .config
-
 # 2. 强制禁用基础版 wpad，避免与 wpad-openssl 冲突
 sed -i 's/CONFIG_PACKAGE_wpad-basic=y/# CONFIG_PACKAGE_wpad-basic is not set/g' .config
 sed -i 's/CONFIG_PACKAGE_wpad-basic-mbedtls=y/# CONFIG_PACKAGE_wpad-basic-mbedtls is not set/g' .config
 echo "# CONFIG_PACKAGE_wpad-basic is not set" >> .config
 echo "# CONFIG_PACKAGE_wpad-basic-mbedtls is not set" >> .config
-
 # 3. 解决 ath11k 固件冲突：强制禁用 DD-WRT 版本
-sed -i 's/CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt=y/# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt is not set/g' .config
+sed -i 's/CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt=y/# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt/g' .config
 echo "# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt is not set" >> .config
-
 # ==============================================
 # 6. 修改默认IP为192.168.11.1
 # ==============================================
 echo -e "\n===== Step 6: Modify default IP ====="
 sed -i 's/192.168.1.1/192.168.11.1/g' package/base-files/files/bin/config_generate
-
 # ==============================================
 # 7. 刷新配置依赖，确保所有干预生效
 # ==============================================
 echo -e "\n===== Step 7: Refresh config dependencies ====="
 make defconfig
-
 # ==============================================
 # 最终提示
 # ==============================================
 cat << EOF
-
 ===== DIY completed! =====
+✅ 已降级libbpf到1.6.0，规避GCC14编译问题
+✅ NSS ECM strlcpy问题已修复
 ✅ 已克隆OpenClash master分支最新版
 ✅ 默认IP已修改为：192.168.11.1
 ✅ Golang已升级到26.x
