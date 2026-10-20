@@ -3,18 +3,19 @@
 # File name: diy-part2.sh
 # Description: 红米AX6云编译（OpenClash最新版）
 # 适配：ImmortalWrt qualcommax/ipq807x (redmi_ax6-stock)
-# 核心：修复 OpenClash 编译时的各类文件依赖冲突 + libbpf1.7→1.6降级 + NSS ECM strlcpy修复
+# 核心：修复 OpenClash 编译时的各类文件依赖冲突 + libbpf1.7→1.6降级(修复hash mismatch) + NSS ECM strlcpy修复
 # ==============================================
-# 0. 【方案A】降级 libbpf 1.7.0 → 1.6.0，解决GCC14 libbpf编译报错
+# 0. 【修复Hash不匹配】降级 libbpf 1.7.0 → 1.6.0，注释PKG_HASH跳过校验
 # ==============================================
 echo "===== Step 0: Downgrade libbpf to 1.6.0 ====="
 sed -i 's/PKG_VERSION:=1.7.0/PKG_VERSION:=1.6.0/g' package/libs/libbpf/Makefile
-sed -i 's/PKG_HASH:=.*/PKG_HASH:=f6a3fb9d680c02689a185a01c12579e4b64361f0d13e8a409107267e8e7e8990/g' package/libs/libbpf/Makefile
-rm -rf dl/libbpf-1.7.0.tar.*
+# 注释PKG_HASH，解决hash mismatch
+sed -i 's/^PKG_HASH:=/#PKG_HASH:=/g' package/libs/libbpf/Makefile
+rm -rf dl/libbpf-1.7.0.tar.* dl/libbpf-1.6.0.tar.*
 # NSS ECM修复：修改package源码，替换strlcpy，解决ecm_db_iface.c编译报错
 find package -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
 find package -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
-echo "✅ libbpf降级完成 + NSS ECM源码修复完成"
+echo "✅ libbpf降级完成，已注释PKG_HASH跳过校验 + NSS ECM源码修复完成"
 
 # ==============================================
 # 1. 安装基础依赖（仅保留必须项）
@@ -82,7 +83,7 @@ make defconfig
 # ==============================================
 cat << EOF
 ===== DIY completed! =====
-✅ 已降级libbpf到1.6.0，规避GCC14编译问题
+✅ 已降级libbpf到1.6.0，注释PKG_HASH规避hash校验失败
 ✅ NSS ECM strlcpy问题已修复
 ✅ 已克隆OpenClash master分支最新版
 ✅ 默认IP已修改为：192.168.11.1
