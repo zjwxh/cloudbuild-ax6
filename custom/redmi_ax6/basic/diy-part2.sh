@@ -3,95 +3,102 @@
 # File name: diy-part2.sh
 # Description: 红米AX6云编译（OpenClash最新版）
 # 适配：ImmortalWrt qualcommax/ipq807x (redmi_ax6-stock)
-# 核心：彻底修复libbpf GCC14编译报错 + NSS ECM strlcpy问题
+# 核心：libbpf GCC14修复 + NSS ECM + Golang 1.27 适配 xray-core
 # ==============================================
-# 0. 【真正生效的修复逻辑，之前的空跑操作全部修正】
+# 0. 【修复libbpf GCC14 & NSS ECM strlcpy问题】
 # ==============================================
 echo "===== Step 0: Fix libbpf GCC14 & NSS ECM ====="
-# 0.1 清理上次失败的libbpf旧编译缓存，强制重新编译
+# 清理旧缓存
 rm -rf build_dir/target-*/libbpf-* 2>/dev/null
 rm -rf staging_dir/target-*/lib/libbpf* 2>/dev/null
-# 0.2 给libbpf包强制覆盖编译参数：过滤所有-Werror，警告不终止编译
+# libbpf 关闭-Werror，警告不终止编译
 echo "MAKE_FLAGS += CFLAGS=\"\$(filter-out -Werror,\$(CFLAGS)) -Wno-error\"" >> package/libs/libbpf/Makefile
-# 0.3 修正NSS ECM修复路径：同时搜索package、feeds、package/feeds目录（之前只搜package找不到文件）
+# NSS ECM 修复，多路径查找
 find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
 find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
-echo "✅ 修复已全部生效"
+echo "✅ libbpf & NSS ECM 修复完成"
 
 # ==============================================
-# 1. 安装基础依赖（仅保留必须项）
+# 1. 安装基础依赖
 # ==============================================
 echo "===== Step 1: Install basic dependencies ====="
 sudo apt update -y
 sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
                     gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev \
                     file wget libfuse-dev curl
+
 # ==============================================
-# 2. 升级feeds中的Golang到26.x
+# 2. 升级Golang到 27.x (Go 1.27，满足xray-core要求)
 # ==============================================
-echo -e "\n===== Step 2: Upgrade Golang to 26.x ====="
+echo -e "\n===== Step 2: Upgrade Golang to 27.x ====="
 rm -rf feeds/packages/lang/golang
-git clone --depth=1 https://github.com/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
+git clone --depth=1 https://github.com/sbwml/packages_lang_golang -b 27.x feeds/packages/lang/golang
+
 # ==============================================
-# 3. 删除旧的OpenClash包（防止冲突）
+# 3. 删除旧OpenClash包，防止残留冲突
 # ==============================================
 echo -e "\n===== Step 3: Remove old OpenClash packages ====="
 rm -rf feeds/luci/applications/luci-app-openclash
 rm -rf package/luci-app-openclash
 rm -rf package/feeds/luci/luci-app-openclash
+
 # ==============================================
-# 4. 克隆OpenClash最新版
+# 4. 拉取最新 OpenClash
 # ==============================================
 echo -e "\n===== Step 4: Clone latest OpenClash ====="
 git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
-# 确保目录存在后，禁用编译时下载内核（修复Makefile报错）
 if [ -d "package/luci-app-openclash" ]; then
     echo "OPENCLASH_DOWNLOAD_CORE := false" >> package/luci-app-openclash/Makefile
-    echo "✅ OpenClash最新版克隆成功，已禁用内核自动下载"
+    echo "✅ OpenClash 克隆成功，关闭内核编译时自动下载"
 else
-    echo "❌ OpenClash克隆失败！"
+    echo "❌ OpenClash clone failed!"
     exit 1
 fi
+
 # ==============================================
-# 5. 配置 OpenClash 及彻底解决打包冲突 (核心修复区)
+# 5. 配置 & 解决各类包冲突
 # ==============================================
 echo -e "\n===== Step 5: Configure OpenClash & Fix Conflicts ====="
-# 启用 OpenClash 编译开关
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
-# 1. 强制禁用基础版 dnsmasq，让路给 dnsmasq-full
+
+# dnsmasq 冲突，用 dnsmasq-full
 sed -i 's/CONFIG_PACKAGE_dnsmasq=y/# CONFIG_PACKAGE_dnsmasq is not set/g' .config
 echo "# CONFIG_PACKAGE_dnsmasq is not set" >> .config
-# 2. 强制禁用基础版 wpad，避免与 wpad-openssl 冲突
+
+# wpad 冲突
 sed -i 's/CONFIG_PACKAGE_wpad-basic=y/# CONFIG_PACKAGE_wpad-basic is not set/g' .config
 sed -i 's/CONFIG_PACKAGE_wpad-basic-mbedtls=y/# CONFIG_PACKAGE_wpad-basic-mbedtls is not set/g' .config
 echo "# CONFIG_PACKAGE_wpad-basic is not set" >> .config
 echo "# CONFIG_PACKAGE_wpad-basic-mbedtls is not set" >> .config
-# 3. 解决 ath11k 固件冲突：强制禁用 DD-WRT 版本
+
+# ath11k ddwrt 固件冲突
 sed -i 's/CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt=y/# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt/g' .config
 echo "# CONFIG_PACKAGE_ath11k-firmware-ipq8074-ddwrt is not set" >> .config
+
 # ==============================================
-# 6. 修改默认IP为192.168.11.1
+# 6. 修改默认网关IP 192.168.11.1
 # ==============================================
 echo -e "\n===== Step 6: Modify default IP ====="
 sed -i 's/192.168.1.1/192.168.11.1/g' package/base-files/files/bin/config_generate
+
 # ==============================================
-# 7. 刷新配置依赖，确保所有干预生效
+# 7. 刷新defconfig，让配置全部生效
 # ==============================================
 echo -e "\n===== Step 7: Refresh config dependencies ====="
 make defconfig
+
 # ==============================================
-# 最终提示
+# 提示信息
 # ==============================================
 cat << EOF
 ===== DIY completed! =====
-✅ libbpf GCC14编译错误已彻底修复（强制过滤-Werror，警告不报错）
-✅ NSS ECM strlcpy源码修复已生效（搜索路径已修正到feeds目录）
-✅ 已清理上次失败的libbpf旧编译缓存
-✅ 已克隆OpenClash master分支最新版
-✅ 默认IP已修改为：192.168.11.1
-✅ Golang已升级到26.x
-✅ 【核心修复】已完美清理 dnsmasq、wpad 及 ath11k-ddwrt 的文件冲突！
-✅ 刷入固件后，SSH登录执行以下命令安装最新mihomo内核：
+✅ libbpf GCC14 警告阻断修复
+✅ NSS ECM strlcpy 源码修复
+✅ Golang 升级到 1.27 (27.x)，适配新版 xray-core
+✅ OpenClash 最新版，关闭编译阶段内核下载
+✅ 默认IP：192.168.11.1
+✅ dnsmasq / wpad / ath11k-ddwrt 冲突已屏蔽
+刷入后SSH执行安装mihomo内核：
 ---------------------------------------------------
 mkdir -p /etc/openclash/core && cd /etc/openclash/core && \\
 rm -rf clash_meta mihomo.tar.gz && \\
