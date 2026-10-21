@@ -1,22 +1,39 @@
 #!/bin/bash
 #
 # File name: diy-part2.sh
-# Description: 红米AX6云编译（OpenClash最新版）
-# 适配：ImmortalWrt qualcommax/ipq807x (redmi_ax6-stock)
-# 核心：libbpf GCC14修复 + NSS ECM + Golang 1.27 适配 xray-core
+# Description: 红米AX6云编译 OpenClash，VIKINGYFY main高通专用满血NSS分支
+# 适配：VIKINGYFY immortalwrt main ipq807x 无线正常、NSS ECM完整
+# 新增：自动修复 qca-nss-ecm ecm_conntrack_notifier.c netfilter API报错
 # ==============================================
-# 0. 【修复libbpf GCC14 & NSS ECM strlcpy问题】
+# 0. 【核心：修复 qca-nss-ecm conntrack notifier API冲突（main分支专用补丁）】
 # ==============================================
-echo "===== Step 0: Fix libbpf GCC14 & NSS ECM ====="
-# 清理旧缓存
+echo "===== Step 0: Patch qca-nss-ecm ecm_conntrack_notifier.c ====="
+ECM_FILE="package/qca-nss/qca-nss-ecm/src/ecm_conntrack_notifier.c"
+if [ -f "$ECM_FILE" ]; then
+    # 替换结构体定义，改成 notifier_block
+    sed -i '/struct nf_ct_event_notifier ecm_conntrack_notifier = {/c\static struct notifier_block ecm_conntrack_notifier = {' $ECM_FILE
+    sed -i '/\.notifier_call = ecm_conntrack_event_handler,/c\    .notifier_call = ecm_conntrack_event_handler,' $ECM_FILE
+    sed -i '/};/c\};' $ECM_FILE
+
+    # 修复注册函数调用
+    sed -i 's/nf_conntrack_register_notifier(&init_net, &ecm_conntrack_notifier);/nf_conntrack_register_notifier(&init_net, \&ecm_conntrack_notifier);/' $ECM_FILE
+    # 修复注销，补充第二个参数
+    sed -i 's/nf_conntrack_unregister_notifier(&init_net);/nf_conntrack_unregister_notifier(&init_net, \&ecm_conntrack_notifier);/' $ECM_FILE
+    echo "✅ qca-nss-ecm conntrack API补丁应用成功"
+else
+    echo "⚠️  警告：未找到ecm_conntrack_notifier.c，跳过ECM补丁"
+fi
+
+# 【修复libbpf GCC14 & NSS ECM strlcpy问题】
+echo "===== Step 0.1: Fix libbpf GCC14 & NSS ECM strlcpy ====="
 rm -rf build_dir/target-*/libbpf-* 2>/dev/null
 rm -rf staging_dir/target-*/lib/libbpf* 2>/dev/null
 # libbpf 关闭-Werror，警告不终止编译
 echo "MAKE_FLAGS += CFLAGS=\"\$(filter-out -Werror,\$(CFLAGS)) -Wno-error\"" >> package/libs/libbpf/Makefile
-# NSS ECM 修复，多路径查找
+# NSS ECM strlcpy补丁
 find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
 find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
-echo "✅ libbpf & NSS ECM 修复完成"
+echo "✅ libbpf & NSS ECM strlcpy补丁完成"
 
 # ==============================================
 # 1. 安装基础依赖
@@ -28,7 +45,7 @@ sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib g++-m
                     file wget libfuse-dev curl
 
 # ==============================================
-# 2. 升级Golang到 27.x (Go 1.27，满足xray-core要求)
+# 2. 升级Golang到 27.x (Go1.27，适配xray-core)
 # ==============================================
 echo -e "\n===== Step 2: Upgrade Golang to 27.x ====="
 rm -rf feeds/packages/lang/golang
@@ -49,7 +66,7 @@ echo -e "\n===== Step 4: Clone latest OpenClash ====="
 git clone --depth=1 --single-branch https://github.com/vernesong/OpenClash.git package/luci-app-openclash
 if [ -d "package/luci-app-openclash" ]; then
     echo "OPENCLASH_DOWNLOAD_CORE := false" >> package/luci-app-openclash/Makefile
-    echo "✅ OpenClash 克隆成功，关闭内核编译时自动下载"
+    echo "✅ OpenClash 克隆成功，关闭编译阶段内核自动下载"
 else
     echo "❌ OpenClash clone failed!"
     exit 1
@@ -61,13 +78,13 @@ fi
 echo -e "\n===== Step 5: Configure OpenClash & Fix Conflicts ====="
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
 
-# dnsmasq 冲突，用 dnsmasq-full
+# dnsmasq 冲突，使用dnsmasq-full
 sed -i 's/CONFIG_PACKAGE_dnsmasq=y/# CONFIG_PACKAGE_dnsmasq is not set/g' .config
 echo "# CONFIG_PACKAGE_dnsmasq is not set" >> .config
 
-# wpad 冲突
+# wpad 冲突处理
 sed -i 's/CONFIG_PACKAGE_wpad-basic=y/# CONFIG_PACKAGE_wpad-basic is not set/g' .config
-sed -i 's/CONFIG_PACKAGE_wpad-basic-mbedtls=y/# CONFIG_PACKAGE_wpad-basic-mbedtls is not set/g' .config
+sed -i 's/CONFIG_PACKAGE_wpad-basic-mbedtls=y/# CONFIG_PACKAGE_wpad-basic-mbedtls/g' .config
 echo "# CONFIG_PACKAGE_wpad-basic is not set" >> .config
 echo "# CONFIG_PACKAGE_wpad-basic-mbedtls is not set" >> .config
 
@@ -82,7 +99,7 @@ echo -e "\n===== Step 6: Modify default IP ====="
 sed -i 's/192.168.1.1/192.168.11.1/g' package/base-files/files/bin/config_generate
 
 # ==============================================
-# 7. 刷新defconfig，让配置全部生效
+# 7. 刷新defconfig，配置全部生效
 # ==============================================
 echo -e "\n===== Step 7: Refresh config dependencies ====="
 make defconfig
@@ -92,17 +109,17 @@ make defconfig
 # ==============================================
 cat << EOF
 ===== DIY completed! =====
-✅ libbpf GCC14 警告阻断修复
-✅ NSS ECM strlcpy 源码修复
-✅ Golang 升级到 1.27 (27.x)，适配新版 xray-core
-✅ OpenClash 最新版，关闭编译阶段内核下载
+✅ VIKINGYFY main高通专用分支，满血NSS ECM补丁已加载，无线正常可用
+✅ 修复qca-nss-ecm conntrack notifier API报错
+✅ libbpf GCC14警告阻断修复
+✅ Golang 升级到 1.27，适配新版xray-core
+✅ OpenClash最新版，关闭编译阶段内核下载
 ✅ 默认IP：192.168.11.1
-✅ dnsmasq / wpad / ath11k-ddwrt 冲突已屏蔽
 刷入后SSH执行安装mihomo内核：
 ---------------------------------------------------
 mkdir -p /etc/openclash/core && cd /etc/openclash/core && \\
 rm -rf clash_meta mihomo.tar.gz && \\
-curl -L --retry 3 https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-release@main/latest/mihomo-linux-mips64el.tar.gz -o mihomo.tar.gz && \\
+curl -L --retry 3 https://cdn.jsdelivr.net/gh/MetaCubeX/mihomo-release@main/latest/mihomo-linux-aarch64.tar.gz -o mihomo.tar.gz && \\
 tar zxvf mihomo.tar.gz && mv mihomo clash_meta && chmod +x clash_meta && \\
 /etc/init.d/openclash restart
 ---------------------------------------------------
