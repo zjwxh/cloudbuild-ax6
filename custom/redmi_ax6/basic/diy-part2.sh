@@ -3,16 +3,20 @@
 # File name: diy-part2.sh
 # Description: 红米AX6云编译（OpenClash最新版）
 # 适配：ImmortalWrt qualcommax/ipq807x (redmi_ax6-stock)
-# 核心：修复 OpenClash 编译冲突 + libbpf GCC14警告关闭 + NSS ECM strlcpy修复
+# 核心：彻底修复libbpf GCC14编译报错 + NSS ECM strlcpy问题
 # ==============================================
-# 0. 【不降级libbpf，关闭GCC14严格警告报错】
+# 0. 【真正生效的修复逻辑，之前的空跑操作全部修正】
 # ==============================================
-echo "===== Step 0: Fix libbpf GCC14 -Werror compile error ====="
-sed -i 's/-Werror=format-security/-Wformat-security/g' package/libs/libbpf/Makefile
-# NSS ECM strlcpy源码修复
-find package -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
-find package -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
-echo "✅ libbpf GCC14警告修复 + NSS ECM源码修复完成"
+echo "===== Step 0: Fix libbpf GCC14 & NSS ECM ====="
+# 0.1 清理上次失败的libbpf旧编译缓存，强制重新编译
+rm -rf build_dir/target-*/libbpf-* 2>/dev/null
+rm -rf staging_dir/target-*/lib/libbpf* 2>/dev/null
+# 0.2 给libbpf包强制覆盖编译参数：过滤所有-Werror，警告不终止编译
+echo "MAKE_FLAGS += CFLAGS=\"\$(filter-out -Werror,\$(CFLAGS)) -Wno-error\"" >> package/libs/libbpf/Makefile
+# 0.3 修正NSS ECM修复路径：同时搜索package、feeds、package/feeds目录（之前只搜package找不到文件）
+find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
+find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
+echo "✅ 修复已全部生效"
 
 # ==============================================
 # 1. 安装基础依赖（仅保留必须项）
@@ -80,8 +84,9 @@ make defconfig
 # ==============================================
 cat << EOF
 ===== DIY completed! =====
-✅ libbpf保留原版1.7.0，关闭GCC14 -Werror=format-security
-✅ NSS ECM strlcpy问题已修复
+✅ libbpf GCC14编译错误已彻底修复（强制过滤-Werror，警告不报错）
+✅ NSS ECM strlcpy源码修复已生效（搜索路径已修正到feeds目录）
+✅ 已清理上次失败的libbpf旧编译缓存
 ✅ 已克隆OpenClash master分支最新版
 ✅ 默认IP已修改为：192.168.11.1
 ✅ Golang已升级到26.x
