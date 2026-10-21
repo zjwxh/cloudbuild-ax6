@@ -30,7 +30,7 @@ jobs:
           sudo rm -rf /var/cache/apt/* /var/lib/apt/lists/* /tmp/* /var/tmp/* /var/log/*
           df -hT
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: 初始化环境
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -80,7 +80,7 @@ jobs:
           rm -rf packages
           echo "FIRMWARE=$PWD" >> $GITHUB_ENV
       - name: 上传固件
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: steps.compile.outputs.status == 'success'
         with:
           name: OpenWrt_firmware
