@@ -41,23 +41,110 @@ else
 fi
 
 # ==============================================
+# 4.5 补回缺失的 libffi 包
+# ==============================================
+# 本高通裁剪分支的 packages feed 里没有 libffi（日志: No feed for package 'libffi' found），
+# 而 python3（--with-system-ffi）、glib2、ruby、wayland 等都依赖它，缺了 python3 编 _ctypes
+# 会报 ffi.h: No such file or directory。这里把标准 libffi 3.4.7 包补进主源码 package/libs，
+# InstallDev 会把 ffi.h 装入 target staging，python3 的 _ctypes 即可正常编译。
+echo -e "\n===== Step 4.5: Add missing libffi package ====="
+mkdir -p package/libs/libffi
+cat > package/libs/libffi/Makefile <<'LIBFFI_MK_EOF'
+#
+# Copyright (C) 2009-2016 OpenWrt.org
+#
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=libffi
+PKG_VERSION:=3.4.7
+PKG_RELEASE:=1
+
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
+PKG_SOURCE_URL:=https://github.com/libffi/libffi/releases/download/v$(PKG_VERSION)
+PKG_HASH:=138607dee268bdecf374adf9144c00e839e38541f75f24a1fcf18b78fda48b2d
+
+PKG_LICENSE:=MIT
+PKG_LICENSE_FILES:=LICENSE
+PKG_CPE_ID:=cpe:/a:libffi_project:libffi
+
+PKG_INSTALL:=1
+PKG_BUILD_PARALLEL:=1
+PKG_BUILD_FLAGS:=no-mips16
+
+include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/host-build.mk
+
+define Package/libffi
+  SECTION:=libs
+  CATEGORY:=Libraries
+  TITLE:=Foreign Function Interface (FFI) library
+  URL:=https://sourceware.org/libffi/
+  MAINTAINER:=Peter Wagner <tripolar@gmx.at>
+endef
+
+define Package/libffi/description
+The libffi library provides a portable, high level programming interface to
+various calling conventions. This allows a programmer to call any function
+specified by a call interface description at run-time.
+FFI stands for Foreign Function Interface. A foreign function interface is the
+popular name for the interface that allows code written in one language to call
+code written in another language. The libffi library really only provides the
+lowest, machine dependent layer of a fully featured foreign function interface.
+A layer must exist above libffi that handles type conversions for values passed
+between the two languages.
+endef
+
+HOST_CONFIGURE_ARGS += \
+	--disable-shared \
+	--disable-docs \
+	--disable-multi-os-directory \
+	--disable-raw-api \
+	--disable-structs \
+	--with-pic
+
+CONFIGURE_ARGS += \
+	--disable-docs \
+	--disable-multi-os-directory \
+	--disable-raw-api \
+	--disable-structs
+
+define Build/InstallDev
+	$(INSTALL_DIR) $(1)/usr/lib/pkgconfig
+	$(CP) \
+		$(PKG_INSTALL_DIR)/usr/lib/libffi.{so*,a,la} \
+		$(1)/usr/lib/
+	$(CP) \
+		$(PKG_INSTALL_DIR)/usr/lib/pkgconfig/* \
+		$(1)/usr/lib/pkgconfig/
+	$(SED) 's,includedir=.*,includedir=$$$${prefix}/include,' $(1)/usr/lib/pkgconfig/libffi.pc
+	$(INSTALL_DIR) $(1)/usr/include
+	$(CP) \
+		$(PKG_INSTALL_DIR)/usr/include/*.h \
+		$(1)/usr/include/
+endef
+
+define Package/libffi/install
+	$(INSTALL_DIR) $(1)/usr/lib
+	$(CP) \
+		$(PKG_INSTALL_DIR)/usr/lib/libffi.so.* \
+		$(1)/usr/lib/
+endef
+
+$(eval $(call HostBuild))
+$(eval $(call BuildPackage,libffi))
+LIBFFI_MK_EOF
+echo "✅ 已补入 package/libs/libffi（3.4.7）"
+
+# ==============================================
 # 5. 配置 & 解决各类包冲突
 # ==============================================
 echo -e "\n===== Step 5: Configure OpenClash & Fix Conflicts ====="
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
-
-# --- 修复 python3 _ctypes 缺 ffi.h ---
-# 本高通裁剪分支环境没有外部 libffi 包（CONFIG_PACKAGE_libffi 是无效符号，defconfig 会丢弃）。
-# python3 Makefile 里的 --with-system-ffi 强制用外部 ffi 编 _ctypes，缺 ffi.h 直接 fatal。
-# 去掉该强制开关后，configure 会把 _ctypes 当作缺失可选模块自动跳过，不再编译报错。
-PY3MK="feeds/packages/lang/python/python3/Makefile"
-if [ -f "$PY3MK" ]; then
-    sed -i 's/--with-system-ffi//' "$PY3MK"
-    echo "✅ 已去掉 python3 的 --with-system-ffi，跳过 _ctypes（无外部 libffi）"
-    grep -n "system-ffi" "$PY3MK" || echo "   确认：Makefile 中已无 --with-system-ffi"
-else
-    echo "⚠️ 未找到 $PY3MK，跳过 ffi 修复"
-fi
+# 显式选中补回的 libffi，确保 ffi.h 进入 staging
+echo "CONFIG_PACKAGE_libffi=y" >> .config
 
 # dnsmasq 冲突，使用dnsmasq-full
 sed -i 's/CONFIG_PACKAGE_dnsmasq=y/# CONFIG_PACKAGE_dnsmasq is not set/g' .config
@@ -84,6 +171,8 @@ sed -i 's/192.168.1.1/192.168.11.1/g' package/base-files/files/bin/config_genera
 # ==============================================
 echo -e "\n===== Step 7: Refresh config dependencies ====="
 make defconfig
+echo ">>> 补包后 libffi 状态:"
+grep -i libffi .config || true
 
 # ==============================================
 # 提示信息
@@ -95,7 +184,7 @@ cat << EOF
 ✅ libbpf GCC14警告阻断修复
 ✅ Golang 升级到 1.27，适配新版xray-core
 ✅ OpenClash最新版，关闭编译阶段内核下载
-✅ 已去掉 --with-system-ffi，跳过 _ctypes（本环境无 libffi 包）
+✅ 已补回缺失的 libffi 3.4.7 包，修复 python3 _ctypes 缺 ffi.h
 ✅ 默认IP：192.168.11.1
 刷入后SSH执行安装mihomo内核：
 ---------------------------------------------------
