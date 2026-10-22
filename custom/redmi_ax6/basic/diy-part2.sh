@@ -46,6 +46,19 @@ fi
 echo -e "\n===== Step 5: Configure OpenClash & Fix Conflicts ====="
 echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
 
+# --- 修复 python3 _ctypes 缺 ffi.h ---
+# 本高通裁剪分支环境没有外部 libffi 包（CONFIG_PACKAGE_libffi 是无效符号，defconfig 会丢弃）。
+# python3 Makefile 里的 --with-system-ffi 强制用外部 ffi 编 _ctypes，缺 ffi.h 直接 fatal。
+# 去掉该强制开关后，configure 会把 _ctypes 当作缺失可选模块自动跳过，不再编译报错。
+PY3MK="feeds/packages/lang/python/python3/Makefile"
+if [ -f "$PY3MK" ]; then
+    sed -i 's/--with-system-ffi//' "$PY3MK"
+    echo "✅ 已去掉 python3 的 --with-system-ffi，跳过 _ctypes（无外部 libffi）"
+    grep -n "system-ffi" "$PY3MK" || echo "   确认：Makefile 中已无 --with-system-ffi"
+else
+    echo "⚠️ 未找到 $PY3MK，跳过 ffi 修复"
+fi
+
 # dnsmasq 冲突，使用dnsmasq-full
 sed -i 's/CONFIG_PACKAGE_dnsmasq=y/# CONFIG_PACKAGE_dnsmasq is not set/g' .config
 echo "# CONFIG_PACKAGE_dnsmasq is not set" >> .config
@@ -82,6 +95,7 @@ cat << EOF
 ✅ libbpf GCC14警告阻断修复
 ✅ Golang 升级到 1.27，适配新版xray-core
 ✅ OpenClash最新版，关闭编译阶段内核下载
+✅ 已去掉 --with-system-ffi，跳过 _ctypes（本环境无 libffi 包）
 ✅ 默认IP：192.168.11.1
 刷入后SSH执行安装mihomo内核：
 ---------------------------------------------------
