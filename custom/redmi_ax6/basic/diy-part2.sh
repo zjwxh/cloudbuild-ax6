@@ -2,38 +2,6 @@
 #
 # File name: diy-part2.sh
 # Description: 红米AX6云编译 OpenClash，VIKINGYFY main高通专用满血NSS分支
-# 适配：VIKINGYFY immortalwrt main ipq807x 无线正常、NSS ECM完整
-# 新增：自动修复 qca-nss-ecm ecm_conntrack_notifier.c netfilter API报错
-# ==============================================
-# 0. 【核心：修复 qca-nss-ecm conntrack notifier API冲突（main分支专用补丁）】
-# ==============================================
-echo "===== Step 0: Patch qca-nss-ecm ecm_conntrack_notifier.c ====="
-ECM_FILE="package/qca-nss/qca-nss-ecm/src/ecm_conntrack_notifier.c"
-if [ -f "$ECM_FILE" ]; then
-    # 替换结构体定义，改成 notifier_block
-    sed -i '/struct nf_ct_event_notifier ecm_conntrack_notifier = {/c\static struct notifier_block ecm_conntrack_notifier = {' $ECM_FILE
-    sed -i '/\.notifier_call = ecm_conntrack_event_handler,/c\    .notifier_call = ecm_conntrack_event_handler,' $ECM_FILE
-    sed -i '/};/c\};' $ECM_FILE
-
-    # 修复注册函数调用
-    sed -i 's/nf_conntrack_register_notifier(&init_net, &ecm_conntrack_notifier);/nf_conntrack_register_notifier(&init_net, \&ecm_conntrack_notifier);/' $ECM_FILE
-    # 修复注销，补充第二个参数
-    sed -i 's/nf_conntrack_unregister_notifier(&init_net);/nf_conntrack_unregister_notifier(&init_net, \&ecm_conntrack_notifier);/' $ECM_FILE
-    echo "✅ qca-nss-ecm conntrack API补丁应用成功"
-else
-    echo "⚠️  警告：未找到ecm_conntrack_notifier.c，跳过ECM补丁"
-fi
-
-# 【修复libbpf GCC14 & NSS ECM strlcpy问题】
-echo "===== Step 0.1: Fix libbpf GCC14 & NSS ECM strlcpy ====="
-rm -rf build_dir/target-*/libbpf-* 2>/dev/null
-rm -rf staging_dir/target-*/lib/libbpf* 2>/dev/null
-# libbpf 关闭-Werror，警告不终止编译
-echo "MAKE_FLAGS += CFLAGS=\"\$(filter-out -Werror,\$(CFLAGS)) -Wno-error\"" >> package/libs/libbpf/Makefile
-# NSS ECM strlcpy补丁
-find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i '1i #include <linux/string.h>'
-find package feeds package/feeds -name "ecm_db_iface.c" 2>/dev/null | xargs -r sed -i 's/strlcpy/strncpy/g'
-echo "✅ libbpf & NSS ECM strlcpy补丁完成"
 
 # ==============================================
 # 1. 安装基础依赖
