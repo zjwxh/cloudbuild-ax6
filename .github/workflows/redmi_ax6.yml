@@ -71,17 +71,6 @@ jobs:
         id: compile
         run: |
           cd openwrt
-          # 确保 libffi 选中并先于 python3 预编，把 ffi.h 装入 target staging，
-          # 绕开 python3 主包编译 _ctypes 时找不到 ffi.h（并行竞态 / 未选中都覆盖）
-          echo "CONFIG_PACKAGE_libffi=y" >> .config
-          make defconfig
-          LIBFFI_DIR=$(find package/feeds package feeds -type d -name libffi 2>/dev/null | head -1)
-          echo ">>> libffi dir: ${LIBFFI_DIR:-NOT_FOUND}"
-          [ -n "$LIBFFI_DIR" ] && make "$LIBFFI_DIR/compile" V=s
-          echo ">>> defconfig 后 libffi 状态:"
-          grep -i libffi .config || true
-          echo ">>> staging 中的 ffi.h:"
-          find staging_dir -name 'ffi.h' 2>/dev/null || true
           make -j$(nproc) || make -j1 V=s
           echo "status=success" >> $GITHUB_OUTPUT
       - name: 整理文件
